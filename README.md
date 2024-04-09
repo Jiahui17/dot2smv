@@ -1,10 +1,12 @@
-# A Model Generator Dataflow Circuit Verification for DOT format
+# A Model Generator Dataflow Circuit Verification
 
 ## Getting started (Linux)
 
 Install the dependencies:
 
 ```sh
+sudo apt-get update
+sudo apt-get install git python3 graphviz graphviz-dev
 pip install networkx pygraphviz
 ```
 
