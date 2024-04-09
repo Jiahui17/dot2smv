@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+
+from src.elastic_components import elastic_components
+from src.component_writer import ComponentWriter
+from src.netlist_writer import NetlistWriter
+from src.assumption_writer import AssumptionWriter
+from src.property import check_valid_not_ready
+from src.dfg import DFG, CFG
+from pygraphviz import AGraph
+from pathlib import Path
+from sys import argv
+from os import makedirs
+from os.path import isfile
+import re
+
+script_text = '''
+set verbose_level 0;
+set pp_list cpp;
+set counter_examples 0;
+set dynamic_reorder 1;
+set on_failure_script_quits;
+set reorder_method sift;
+set enable_sexp2bdd_caching 0;
+set bdd_static_order_heuristics basic;
+set cone_of_influence;
+set use_coi_size_sorting 1;
+read_model -i model.smv;
+flatten_hierarchy;
+encode_variables;
+build_flat_model;
+build_model -f;
+check_invar -s forward;
+show_property -o property.rpt;
+time;
+quit
+'''
+
+def generate_model(dfg):
+    model_text = ''
+    model_text += elastic_components + '\n'
+    model_text += ComponentWriter(dfg).write_components() + '\n'
+    netlist = NetlistWriter(dfg).write_netlist() + '\n'
+    model_text += "\n-- model netlist\n"
+    model_text += netlist
+    model_text += "\n-- set of assumptions\n"
+    model_text += AssumptionWriter(dfg).write_assumptions() + '\n'
+    return model_text
+
+
+if __name__ == "__main__":
+    f_dotfile = Path(argv[1]).absolute()
+
+    assert isfile(f_dotfile), "The DOT file specified in the first argument does not exist!"
+
+    dfg = DFG(AGraph(f_dotfile, strict=False, directed=True))
+
+    model_text = generate_model(dfg)
+    model_text = re.sub(r'^.*#include.*$', '', model_text, flags=re.MULTILINE)
+    model_text = re.sub(r'^\t+', '', model_text, flags=re.MULTILINE)
+
+    d_smv = f_dotfile.parents[0]
+    makedirs(d_smv, exist_ok=True)
+
+    # the list of invariant properties to add, currently just the "absence of
+    # stall" properties
+
+    #prop_text = "-- list of properties to check\n"
+    prop_text = check_valid_not_ready(dfg)
+
+    f_smv_model = d_smv / 'model.smv'
+    with open(f_smv_model, 'w') as f:
+        f.write(model_text)
+        f.write(prop_text)
+    f_smv_script = d_smv / 'prove.cmd'
+    with open(f_smv_script, 'w') as f:
+        f.write(re.sub(r'^\t+','',script_text, flags=re.MULTILINE))
