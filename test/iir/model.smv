@@ -1,0 +1,1228 @@
+
+// elastic_components.smv
+#pragma once
+
+MODULE sink_1_0(dataIn0, pValid0)
+DEFINE ready0 := TRUE;
+
+MODULE source_0_1(nReady0)
+DEFINE valid0  := TRUE;
+DEFINE dataOut0 := FALSE;
+
+////////////////////////////////////////
+// name     : open_0_1
+// inputs   : nReady0
+// outputs  : dataOut0, valid0
+///////////////////////////////////////
+
+MODULE open_0_1(nReady0)
+DEFINE
+valid0   := FALSE;
+dataOut0 := FALSE;
+
+////////////////////////////////////
+// name    : entry_0_1
+// inputs  : nReady0
+// outputs : dataOut0, valid0
+/////////////////////////////////////
+MODULE entry_0_1(nReady0)
+DEFINE dataOut0 := FALSE;
+VAR valid0   : boolean; // entry node resets with a (dummy) token
+ASSIGN init(valid0) := TRUE; // after firing it only has a bubble
+ASSIGN next(valid0) := (!nReady0 & valid0) ? TRUE : FALSE;
+DEFINE num := toint(valid0);
+DEFINE full := valid0;
+
+////////////////////////////////////
+// name    : entry_1_1
+// inputs  : nReady0
+// outputs : dataOut0, valid0
+/////////////////////////////////////
+
+MODULE entry_1_1(dataIn0, pValid0, nReady0)
+
+VAR 
+dataOut0 : boolean;
+valid0   : boolean;
+
+ASSIGN
+init(dataOut0) := FALSE;
+next(dataOut0) := enable ? dataIn0 : dataOut0;
+init(valid0)   := FALSE;
+next(valid0)   := pValid0 | (!ready0);
+
+DEFINE
+ready0 := (!valid0) | nReady0;
+enable := ready0 & pValid0;
+DEFINE num := toint(valid0);
+
+////////////////////////////////////
+// name    : receiver_1_0
+// inputs  : dataIn0, pValid0
+// outputs : 
+/////////////////////////////////////
+
+MODULE receiver_1_0(dataIn0, pValid0)
+// one-slot receiver
+VAR b0   : oehb_1_1(dataIn0, pValid0, FALSE);
+DEFINE ready0 := b0.ready0;
+DEFINE num := toint(b0.valid0);
+DEFINE full := b0.valid0;
+
+MODULE nd_sink_1_0(dataIn0, pValid0)
+VAR ndw0   : ndw_1_1(dataIn0, pValid0, TRUE);
+DEFINE ready0 := ndw0.ready0;
+MODULE channel_1_1(dataIn0, pValid0, nReady0)
+DEFINE
+dataOut0  := dataIn0;
+valid0    := pValid0;
+ready0    := nReady0;
+
+MODULE ndw_1_1 (dataIn0, pValid0, nReady0)
+VAR
+state : { sleeping, running };
+DEFINE
+dataOut0 := dataIn0;
+valid0   := state = running ? pValid0 : FALSE;
+ready0   := state = running ? nReady0 : FALSE;
+ASSIGN
+init(state) := { running, sleeping };
+next(state) := case
+state = sleeping & pValid0 : { sleeping, running };// when the wire is sleeping, it at least delays the data by one step; 
+state = running  & pValid0 : { sleeping, running };// when the wire is running, it at least passes through one valid data;
+TRUE : state;
+esac;
+FAIRNESS state=running;
+
+MODULE ndd_1_1(dataIn0, pValid0, nReady0)
+VAR
+random_bit : boolean;
+DEFINE
+dataOut0 := random_bit;
+valid0 := pValid0;
+ready0 := nReady0;
+ASSIGN
+init(random_bit) := {TRUE, FALSE};
+next(random_bit) := case
+valid0 & nReady0 : {TRUE, FALSE};
+TRUE : random_bit;
+esac;
+
+--| HACK: Below is a special implementation for the decider when it implements a loop bound condition
+--| This does not guarantee to work! If the first iterator value is not within the loop bound,
+--| it goes out immediately, and this model does not capture this.
+--| it implements a regular expression (1+0)*: e.g., 1111101110111110
+--| Here is how it works:
+--| - it resets with loop repeat condition (TRUE), i.e. they repeat the iteration at least once
+--| - if the current condition is loop repeat (TRUE), then the next condition is decided non-deterministically
+--| - if the current condition is loop exit (FALSE), then the next condition is a (loop repeat) TRUE
+
+MODULE rendd_1_1(dataIn0, pValid0, nReady0)
+VAR
+random_bit : boolean;
+DEFINE
+dataOut0 := random_bit;
+valid0 := pValid0;
+ready0 := nReady0;
+ASSIGN
+init(random_bit) := TRUE;
+next(random_bit) := case
+valid0 & nReady0 & (random_bit) : {TRUE, FALSE};
+valid0 & nReady0 & (!random_bit) : TRUE;
+TRUE : random_bit;
+esac;
+
+MODULE oehb_1_1(dataIn0, pValid0, nReady0)
+VAR 
+reg : boolean;
+valid0   : boolean;
+ASSIGN
+init(reg) := FALSE;
+next(reg) := enable ? dataIn0 : reg;
+init(valid0)   := FALSE;
+next(valid0)   := pValid0 | (!ready0);
+DEFINE
+dataOut0 := reg;
+ready0 := (!valid0) | nReady0;
+enable := ready0 & pValid0;
+num := toint(valid0);
+full := valid0;
+numplus  := toint(valid0 & reg);
+numminus := toint(valid0 & !reg);
+full_plus := full & dataOut0;
+full_minus := full & !dataOut0;
+
+MODULE tehb_1_1(dataIn0, pValid0, nReady0)
+VAR 
+reg     : boolean;
+full    : boolean;
+ASSIGN
+init(full)  := FALSE;
+next(full)  := valid0 & !nReady0;
+init(reg)  := FALSE;
+next(reg)  := enable ? dataIn0 : reg; 
+DEFINE
+valid0       := pValid0 | full; 
+ready0       := !full;
+enable      := ready0 & pValid0 & !nReady0;
+sel         := full;
+dataOut0     := sel ? reg : dataIn0;
+num := toint(full);
+numplus := count(full & dataOut0);
+numminus := count(full & !dataOut0);
+full_plus := full & dataOut0;
+full_minus := full & !dataOut0;
+
+MODULE elasticBuffer_1_1(dataIn0, pValid0, nReady0)
+VAR
+b0 : tehb_1_1(dataIn0, pValid0, b1.ready0);
+b1 : oehb_1_1(b0.dataOut0, b0.valid0, nReady0);
+DEFINE
+dataOut0 := b1.dataOut0;
+valid0   := b1.valid0;
+ready0   := b0.ready0;
+num := count(b1.valid0, b0.full);
+
+///////////////////////////////////////////
+// name     : tslot
+// inputs   : dataIn0, pValid0, nReady0
+// outputs  : dataOut0, valid0, ready0
+///////////////////////////////////////////
+
+MODULE tslot_1_1(dataIn0, pValid0, nReady0)
+// fully transparent slot
+VAR 
+reg      : boolean;
+full     : boolean;
+
+ASSIGN
+init(reg)    := FALSE;
+next(reg)    := enable ? dataIn0 : reg;
+init(full)   := FALSE;
+next(full)   := (full <-> nReady0) ? pValid0 : full;
+
+DEFINE
+valid0 := full | pValid0; // tslot has valid data whenever it is full, or pValid0
+ready0 := (!full) | nReady0; // tslot ready it is not full, or successor ready for receive data
+enable := pValid0 & (nReady0 <-> full); // load data whenever nReady0 & pValid0
+dataOut0 := full ? reg : dataIn0;
+num := toint(full);
+numplus := toint(full & reg);
+numminus := toint(full & !reg);
+full_plus := full & dataOut0;
+full_minus := full & !dataOut0;
+
+MODULE constant_1_1(dataIn0, pValid0, nReady0)
+DEFINE
+dataOut0 := dataIn0;
+valid0   := pValid0;
+ready0   := nReady0; 
+
+MODULE join_2_1 (pValid0, pValid1, nReady0)
+DEFINE
+valid0 := pValid0 & pValid1;
+ready0 := nReady0 & pValid1;
+ready1 := nReady0 & pValid0;
+
+MODULE join_3_1 (pValid0, pValid1, pValid2, nReady0)
+DEFINE ready0  := nReady0 & pValid1 & pValid2;
+DEFINE ready1  := nReady0 & pValid0 & pValid2;
+DEFINE ready2  := nReady0 & pValid0 & pValid1;
+DEFINE valid0  := pValid0 & pValid1 & pValid2;
+
+MODULE branchSimple(condition, pValid, nReady0, nReady1)
+DEFINE valid1 := !condition & pValid;
+DEFINE valid0 :=  condition & pValid;
+DEFINE ready  :=  nReady1 & !condition | nReady0 & condition;
+
+MODULE branch_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+/*
+port naming for branch
+input-0: data input      (dataIn0, pValid0, ready0)
+input-1: condition input (dataIn1, pValid1, ready1)
+*/
+DEFINE condition := dataIn1;
+VAR    j         : join_2_1(pValid0, pValid1, br.ready);
+VAR    br        : branchSimple(condition, j.valid0, nReady0, nReady1);
+DEFINE dataOut0  := dataIn0; // when ctrl = TRUE
+DEFINE dataOut1  := dataIn0; // when ctrl = FALSE
+DEFINE valid0    := br.valid0;
+DEFINE valid1    := br.valid1;
+DEFINE ready0 := j.ready0; // data input
+DEFINE ready1 := j.ready1; // ctrl input
+
+MODULE eagerFork_RegisterBlock(pValid, nStop, pValidAndForkStop)
+VAR
+reg_value : boolean;
+DEFINE
+blockStop := nStop & reg_value;
+valid := reg_value & pValid;
+ASSIGN
+init(reg_value) := TRUE;
+next(reg_value) := blockStop | !pValidAndForkStop;
+
+MODULE fork_1_2(dataIn0, pValid0, nReady0, nReady1)
+VAR regBlock0 : eagerFork_RegisterBlock(pValid0, nStop0, pValidAndForkStop);
+VAR regBlock1 : eagerFork_RegisterBlock(pValid0, nStop1, pValidAndForkStop);
+DEFINE forkStop := regBlock0.blockStop | regBlock1.blockStop;
+pValidAndForkStop := pValid0 & forkStop;
+DEFINE nStop0 := !nReady0;
+DEFINE nStop1 := !nReady1;
+ready0 := !forkStop;
+valid0 := regBlock0.valid;
+valid1 := regBlock1.valid;
+dataOut0 := dataIn0;
+dataOut1 := dataIn0;
+
+-- for constraint generation modules
+DEFINE sent0 := !regBlock0.reg_value; // f0 running-ahead
+DEFINE sent1 := !regBlock1.reg_value; // f1 running-ahead
+
+DEFINE sent_plus0   := !regBlock0.reg_value & dataIn0; 
+DEFINE sent_minus0  := !regBlock0.reg_value & !dataIn0; 
+DEFINE sent_plus1   := !regBlock1.reg_value & dataIn0;
+DEFINE sent_minus1  := !regBlock1.reg_value & !dataIn0;
+
+DEFINE efr0 := (regBlock0.reg_value); // f0 running-ahead
+DEFINE efr1 := (regBlock1.reg_value); // f1 running-ahead
+DEFINE efr_plus0 := (dataIn0 -> regBlock0.reg_value); 
+DEFINE efr_plus1 := (dataIn0 -> regBlock1.reg_value); 
+DEFINE efr_minus0 := ((!dataIn0) -> regBlock0.reg_value); 
+DEFINE efr_minus1 := ((!dataIn0) -> regBlock1.reg_value); 
+
+///////////////////////////////////////////////////////
+// module : merge_1_1
+// inputs : dataIn0, pValid0, nReady0
+// outputs: dataOut0, valid0, ready0
+//////////////////////////////////////////////////////
+
+MODULE merge_1_1 (dataIn0, pValid0, nReady0)
+DEFINE
+VAR b0 : tehb_1_1(tehb_data_in, pValid0, nReady0);
+DEFINE dataOut0 := b0.dataOut0;
+DEFINE valid0   := b0.valid0; 
+ready0 := b0.ready0;
+// 1-input merge with colored output: always FALSE (from BB that dominates it
+tehb_data_in := FALSE;
+DEFINE num := toint(b0.full); // convience
+
+///////////////////////////////////////////////////////
+// module : merge_2_1
+// inputs : dataIn0, pValid0, dataIn1, pValid1, nReady0
+// outputs: dataOut0, valid0, ready0, ready1
+//////////////////////////////////////////////////////
+
+MODULE merge_2_1(dataIn0, pValid0, dataIn1, pValid1, nReady0)
+DEFINE
+VAR b0 : tehb_1_1(tehb_data_in, tehb_pvalid, nReady0);
+DEFINE dataOut0 := b0.dataOut0;
+DEFINE valid0   := b0.valid0; 
+ready0 := b0.ready0;
+ready1 := b0.ready0; 
+tehb_pvalid := pValid0 | pValid1; 
+
+// new implementation: merge colors output based on which input it has received
+tehb_data_in := case 
+pValid0 : FALSE;
+pValid1 : TRUE;
+TRUE : FALSE;
+esac;
+
+// tehb_data_in := case 
+// pValid0 : dataIn0; 
+// pValid1 : dataIn1;
+// TRUE : dataIn0;
+// esac;
+
+DEFINE num := toint(b0.full); // convience
+
+
+MODULE merge_notehb_2_1(dataIn0, pValid0, dataIn1, pValid1, nReady0)
+DEFINE
+ready0 := nReady0;
+ready1 := nReady0;
+valid0 := pValid0 | pValid1;
+
+// new implementation: merge colors output based on which input it has received
+dataOut0 := case
+pValid0 : FALSE;
+pValid1 : TRUE;
+TRUE : FALSE;
+esac;
+
+// dataOut0 := case
+// pValid0 : dataIn0;
+// pValid1 : dataIn1;
+// TRUE : dataIn0;
+// esac;
+
+///////////////////////////////////////////////////////
+// module : cntrlmerge_2_2
+// inputs : dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1
+// outputs: dataOut0, valid0, dataOut1, valid1, ready0, ready1
+//////////////////////////////////////////////////////
+
+MODULE cntrlmerge_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+DEFINE dataOut0 := f0.dataOut0;
+DEFINE ready0 := m0.ready0;
+DEFINE dataOut1 := b0.dataOut0;
+DEFINE ready1 := m0.ready1;
+DEFINE index := case
+pValid0 : FALSE;
+TRUE    : TRUE;
+esac;
+VAR b0 : tehb_1_1(index, m0.valid0, f0.ready0); 
+VAR m0 : merge_notehb_2_1(dataIn0, pValid0, dataIn1, pValid1, b0.ready0);
+VAR f0 : fork_1_2(b0.dataOut0, b0.valid0, nReady0, nReady1);
+DEFINE valid0 := f0.valid0;
+DEFINE valid1 := f0.valid1;
+DEFINE efr0 := f0.efr0; // f0 running-ahead // convience
+DEFINE efr1 := f0.efr1; // f1 running-ahead // convience
+
+DEFINE efr_plus0  := (b0.dataOut0 -> efr0);
+DEFINE efr_plus1  := (b0.dataOut0 -> efr1);
+DEFINE efr_minus0 := (!b0.dataOut0 -> efr0);
+DEFINE efr_minus1 := (!b0.dataOut0 -> efr1);
+
+-- DEFINE efr_plus0 := f0.efr_plus0; // convience
+-- DEFINE efr_plus1 := f0.efr_plus1; // convience
+-- DEFINE efr_minus0 := f0.efr_minus0; // convience
+-- DEFINE efr_minus1 := f0.efr_minus1; // convience
+
+DEFINE mem := b0.reg; // convience
+DEFINE num := toint(b0.full); // convience
+DEFINE numplus := toint(b0.full & b0.dataOut0); // convience
+DEFINE numminus := toint(b0.full & !b0.dataOut0); // convience
+
+///////////////////////////////////////////////////////
+// module : mux_3_1
+// inputs : dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0
+// outputs: dataOut0, valid0, ready0, ready1, ready2
+//////////////////////////////////////////////////////
+
+MODULE mux_3_1(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0)
+DEFINE sel := dataIn0;
+
+// new implementation: Mux colors output based on its selection input
+DEFINE tehb_data_in := dataIn0;
+
+// old implementation: Mux propagates data (which will be removed by coi)
+// DEFINE tehb_data_in := case
+// pValid0 & sel = FALSE & pValid1 : dataIn1; // if sel-valid, sel-data = 0,  left-pred-ready: take left input
+// pValid0 & sel = TRUE  & pValid2 : dataIn2; // if sel-valid, sel-data = 1, right-pred-ready: take right input
+// TRUE : dataIn1; // everything else, for instance sel-data is not ready
+// esac;
+
+DEFINE ready1 := (!sel & pValid0 & b0.ready0 & pValid1) | !pValid1 ? TRUE : FALSE;
+DEFINE ready2 := (sel & pValid0 & b0.ready0 & pValid2) | !pValid2 ? TRUE : FALSE;
+DEFINE tehb_pvalid := (pValid0 & !sel & pValid1) | (pValid0 & sel & pValid2) ? TRUE : FALSE;
+VAR b0 : tehb_1_1(tehb_data_in, tehb_pvalid, nReady0);
+DEFINE valid0 := b0.valid0;
+DEFINE dataOut0 := b0.dataOut0;
+DEFINE ready0 := (!pValid0 | tehb_pvalid & b0.ready0);
+DEFINE num := toint(b0.full); // convience
+
+--	---------------------------------------------------------------------------
+--	-- New description of select operator
+--	---------------------------------------------------------------------------
+--
+--	MODULE select_op_3_1(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0)
+--
+--	VAR
+--
+--	antitoken1 : boolean;
+--	antitoken2 : boolean;
+--
+--	DEFINE
+--
+--	sel := dataIn0;
+--
+--	-- valid data to send 
+--	ee := sel ? pValid0 & pValid1 : pValid0 & pValid2;
+--
+--	-- transfer is allowed only if the antitokens from the previous round are all used.
+--	valid0 := ee & !antitoken1 & !antitoken2;
+--
+--	out_transfer := valid0 & nReady0;
+--
+--	-- ready to accept data when transfer is possible
+--	ready0 := !pValid0 | out_transfer;
+--	-- ready to accept data when transfer is possible, or antitoken can cancel discarded token
+--	ready1 := !pValid1 | out_transfer | antitoken1;
+--	-- ready to accept data when transfer is possible, or antitoken can cancel discarded token
+--	ready2 := !pValid2 | out_transfer | antitoken2;
+--
+--	dataOut0 := sel ? dataIn1 : dataIn2;
+--
+--	ASSIGN
+--	init(antitoken1) := FALSE;
+--	init(antitoken2) := FALSE;
+--
+--	next(antitoken1) := !pValid1 & (antitoken1 | out_transfer);
+--	next(antitoken2) := !pValid2 & (antitoken2 | out_transfer); 
+
+---------------------------------------------------------------------------
+-- Old description of select operator
+---------------------------------------------------------------------------
+
+MODULE select_op_3_1(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0)
+VAR 
+anti0 : antitokens(pValid2, pValid1, generate_at1, generate_at0);
+DEFINE 
+sel := dataIn0;// selection signal : input-0 
+ee  := sel ? pValid0 & pValid1 : pValid0 & pValid2;// select observes valid data to transfer 
+valid0 := ee & !anti0.stop_valid;// select can propagate new token only after it killed the unused token from previous
+// generate commands: if the unused path is not killed at the same cycle where used path is accpted, then forward this info to the antitokens
+generate_at0 := !pValid1 & valid0 & nReady0; 
+generate_at1 := !pValid2 & valid0 & nReady0;
+ready0 := !pValid0 | (valid0 & nReady0);// like normal join
+ready1 := !pValid1 | (valid0 & nReady0) | anti0.kill0; // like normal join, or kill the unused input
+ready2 := !pValid2 | (valid0 & nReady0) | anti0.kill1; // like normal join, or kill the unused input 
+dataOut0 := sel ? dataIn1 : dataIn2;
+antitoken1 := anti0.reg_out0;
+antitoken2 := anti0.reg_out1;
+
+MODULE antitokens(pValid1, pValid0, generate_at1, generate_at0)
+VAR
+reg_out0 : boolean;
+reg_out1 : boolean;
+DEFINE
+kill0      := generate_at0 | reg_out0;
+kill1      := generate_at1 | reg_out1;
+stop_valid :=     reg_out0 | reg_out1;
+ASSIGN
+init(reg_out0) := FALSE;
+init(reg_out1) := FALSE;
+next(reg_out0) := !pValid0 & (generate_at0 | reg_out0);
+next(reg_out1) := !pValid1 & (generate_at1 | reg_out1);
+
+-----------------------------
+-- select unit with counter
+-----------------------------
+MODULE select_op_counter_3_1(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0)
+VAR 
+counter1 : 0..31;
+anti0 : antitokens(pValid2, pValid0_temp, generate_at1, generate_at0);
+
+DEFINE 
+ee  := pValid0 & ((send_internal_1) | (sel & pValid1 & (counter1 = 0)));
+sel := dataIn0;
+valid0 := ee & !anti0.stop_valid;
+generate_at0 := !pValid1 & valid0 & nReady0; 
+generate_at1 := !pValid2 & valid0 & nReady0;
+ready1 := !pValid1 | (valid0 & nReady0) | kill0_temp; // like normal join, or kill the unused input
+ready2 := !pValid2 | (valid0 & nReady0) | anti0.kill1; // like normal join, or kill the unused input 
+ready0 := !pValid0 | (valid0 & nReady0);// like normal join
+dataOut0 := sel ? dataIn1 : dataIn2;
+
+// at least 1 token at '+' input to kill
+kill0_temp   := !(counter1 = 0);
+pValid0_temp := (counter1 < 31);
+counter_zero := (counter1 = 0);
+send_internal_0 := (kill0_temp & pValid1 & !send_internal_1);
+
+// propagating the '-' input to output
+// whenever
+// - required data are valid (pValid0 and pValid2)
+// - input2 is selected
+// - counter still has capacity (!)
+send_internal_1 := (pValid0 & !sel & pValid2 & (pValid0_temp));
+kill0 := anti0.kill0;
+antitoken1 := anti0.reg_out0;
+antitoken2 := anti0.reg_out1;
+
+ASSIGN
+init(counter1) := 0;
+next(counter1) := case
+kill0 & !send_internal_0 & pValid0_temp : counter1 + 1;
+!kill0 & send_internal_0 : counter1 - 1;
+TRUE : counter1;
+esac;
+
+
+-- this is used to model a shift register (used for instance, inside a multiplier)
+MODULE shift1c(dataIn0, pValid0, nReady0)
+VAR
+dataOut0 : boolean;
+valid0 : boolean;
+
+DEFINE
+ready0 := nReady0;
+full := valid0;
+
+ASSIGN
+init(valid0) := FALSE;
+next(valid0) := nReady0 ? pValid0 : valid0;
+init(dataOut0) := FALSE;
+next(dataOut0) := (pValid0 & nReady0) ? dataIn0 : dataOut0;
+
+MODULE mc_load_op_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+/*
+port naming:
+input-0  : (don't care) data read from MC node
+input-1  : address read from predecessor node
+output-0 : data output to the successor node
+output-1 : (don't care) address output to the MC node
+*/
+VAR b0 : tehb_1_1 (dataIn1, pValid1, ndw0.ready0);
+VAR ndw0  : ndw_1_1  (b0.dataOut0, b0.valid0, b1.ready0); 
+VAR b1 : shift1c (ndw0.dataOut0, ndw0.valid0, b2.ready0);
+VAR b2 : tehb_1_1 (b1.dataOut0, b1.valid0, nReady0);
+DEFINE dataOut0 := b2.dataOut0; // dataOut0 -> successor load output
+DEFINE valid0   := b2.valid0;   // valid0   -> successor load output
+DEFINE ready1   := b0.ready0;   // ready1   -> predecessor request
+DEFINE ready0   := FALSE;           // ready0   -> MC (don't care)
+DEFINE dataOut1 := FALSE;             // dataOut1 -> MC (don't care)
+DEFINE valid1   := TRUE;          // valid1   -> MC (don't care)
+DEFINE num      := count(b0.full, b1.valid0, b2.full);
+
+MODULE mc_store_op_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+/*
+port naming:
+input-0  : data input from store request predecessor
+input-1  : address input from store request predecessor
+output-0 : (don't care) data output to MC
+output-1 : (don't care) address output to MC
+*/
+VAR j     : join_2_1 (pValid0, pValid1, ndw0.ready0); 
+VAR ndw0  : ndw_1_1 (FALSE, j.valid0, sink0.ready0);
+VAR sink0 : sink_1_0 (ndw0.dataOut0, ndw0.valid0);
+DEFINE dataOut0 := FALSE;       // dataOut0 -> data output to MC (don't care)
+DEFINE valid0   := TRUE;    // valid0   -> data output to MC (don't care)
+DEFINE ready0   := j.ready0; // ready0   -> data input from store request predecessor
+DEFINE dataOut1 := FALSE;       // dataOut1 -> address output to MC successor (don't care)
+DEFINE valid1   := TRUE;    // valid1   -> address output to MC successor (don't care)
+DEFINE ready1   := j.ready1; // ready1   -> address input from store request predecessor
+DEFINE num      := 0;
+
+MODULE lsq_store_op_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+/* port naming:
+input-0  : data input from store request predecessor
+input-1  : address input from store request predecessor
+output-0 : (don't care) data output to LSQ
+output-1 : (don't care) address output to LSQ */
+VAR ndw0 : ndw_1_1 (dataIn0, pValid0, TRUE);// input-0 -> ndw0 -> sink0
+VAR ndw1 : ndw_1_1 (dataIn1, pValid1, TRUE);// input-1 -> ndw1 -> sink1
+DEFINE ready0   := ndw0.ready0; // ready0 -> data input from store request predecessor
+DEFINE ready1   := ndw1.ready0; // ready1 -> address input from store request predecessor
+DEFINE dataOut0 := FALSE;       // dataOut0 -> data output to LSQ (don't care)
+DEFINE valid0   := TRUE;     // valid0 -> data output to LSQ (don't care)
+DEFINE dataOut1 := FALSE;    // dataOut1 -> address output to LSQ successor (don't care)
+DEFINE valid1   := TRUE;     // valid1 -> address output to LSQ successor (don't care)
+
+MODULE lsq_load_op_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+// input-0   : (don't care) data read from LSQ node 
+// input-1   : address read from predecessor node
+// output-0  : data output to the successor node
+// output-1  : (don't care) address output to the LSQ node
+
+VAR
+ndw0  : ndw_1_1(dataIn1, pValid1, b0.ready0); 
+b0    : tslot_1_1(ndw0.dataOut0, ndw0.valid0, b1.ready0);
+b1    : tslot_1_1(b0.dataOut0,   b0.valid0,   b2.ready0);
+b2    : tslot_1_1(b1.dataOut0,   b1.valid0,   b3.ready0);
+b3    : tslot_1_1(b2.dataOut0,   b2.valid0,   b4.ready0);
+b4    : tslot_1_1(b3.dataOut0,   b3.valid0,   b5.ready0);
+b5    : oehb_1_1(b4.dataOut0,   b4.valid0,   ndw1.ready0);
+ndw1  : ndw_1_1(b5.dataOut0, b5.valid0, nReady0);
+
+DEFINE
+dataOut0 := ndw1.dataOut0; // dataOut0 -> successor load output
+valid0   := ndw1.valid0;   // valid0   -> successor load output
+ready1   := ndw0.ready0;   // ready1   -> predecessor request
+ready0   := FALSE;         // ready0   -> MC (don't care)
+dataOut1 := FALSE;         // dataOut1 -> MC (don't care)
+valid1   := TRUE;          // valid1   -> MC (don't care)
+
+
+#ifndef WRITE_BUFFER_FIFO_BASED_FALSE_1
+#define WRITE_BUFFER_FIFO_BASED_FALSE_1
+
+MODULE buffer1o_1_1(dataIn0, pValid0, nReady0)
+VAR
+b : elasticBuffer_1_1(dataIn0, pValid0, nReady0);
+DEFINE
+dataOut0 := b.dataOut0;
+valid0   := b.valid0;
+ready0   := b.ready0;
+num := count(b.b0.valid0, b.b1.full);
+numplus := count(b.b0.valid0 & b.b0.dataOut0, b.b1.full & b.b1.dataOut0);
+numminus := count(b.b0.valid0 & !b.b0.dataOut0, b.b1.full & !b.b1.dataOut0);
+
+#endif // WRITE_BUFFER_FIFO_BASED_FALSE_1
+
+
+#ifndef WRITE_BUFFER_SLOT_BASED_FALSE_1
+#define WRITE_BUFFER_SLOT_BASED_FALSE_1
+
+MODULE _buffer1o_1_1(dataIn0, pValid0, nReady0)
+VAR
+b0     : tehb_1_1(dataIn0, pValid0, b1.ready0);
+b1     : oehb_1_1(b0.dataOut0, b0.valid0, nReady0);
+DEFINE 
+dataOut0 := b1.dataOut0;
+valid0 := b1.valid0;
+ready0 := b0.ready0;
+
+#endif // WRITE_BUFFER_SLOT_BASED_FALSE_1
+
+
+#ifndef WRITE_FORK_3
+#define WRITE_FORK_3
+MODULE fork_1_3(dataIn0, pValid0, nReady0, nReady1, nReady2)DEFINE forkStop := regBlock0.blockStop | regBlock1.blockStop | regBlock2.blockStop;pValidAndForkStop := pValid0 & forkStop;
+ready0 := !forkStop;
+
+VAR regBlock0 : eagerFork_RegisterBlock(pValid0, nStop0, pValidAndForkStop);
+DEFINE nStop0      := !nReady0;
+DEFINE valid0      := regBlock0.valid;
+DEFINE dataOut0    := dataIn0;
+DEFINE sent0       := !regBlock0.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus0  := !regBlock0.reg_value & dataIn0; 
+DEFINE sent_minus0 := !regBlock0.reg_value & !dataIn0; 
+DEFINE efr0 := (regBlock0.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus0 := (dataIn0 -> regBlock0.reg_value); // 
+DEFINE efr_minus0 := ((!dataIn0) -> regBlock0.reg_value); // 
+
+VAR regBlock1 : eagerFork_RegisterBlock(pValid0, nStop1, pValidAndForkStop);
+DEFINE nStop1      := !nReady1;
+DEFINE valid1      := regBlock1.valid;
+DEFINE dataOut1    := dataIn0;
+DEFINE sent1       := !regBlock1.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus1  := !regBlock1.reg_value & dataIn0; 
+DEFINE sent_minus1 := !regBlock1.reg_value & !dataIn0; 
+DEFINE efr1 := (regBlock1.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus1 := (dataIn0 -> regBlock1.reg_value); // 
+DEFINE efr_minus1 := ((!dataIn0) -> regBlock1.reg_value); // 
+
+VAR regBlock2 : eagerFork_RegisterBlock(pValid0, nStop2, pValidAndForkStop);
+DEFINE nStop2      := !nReady2;
+DEFINE valid2      := regBlock2.valid;
+DEFINE dataOut2    := dataIn0;
+DEFINE sent2       := !regBlock2.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus2  := !regBlock2.reg_value & dataIn0; 
+DEFINE sent_minus2 := !regBlock2.reg_value & !dataIn0; 
+DEFINE efr2 := (regBlock2.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus2 := (dataIn0 -> regBlock2.reg_value); // 
+DEFINE efr_minus2 := ((!dataIn0) -> regBlock2.reg_value); // 
+
+#endif // WRITE_FORK_3
+
+
+#ifndef WRITE_OPERATOR_2_1_0
+#define WRITE_OPERATOR_2_1_0
+
+MODULE operator0c_2_1(dataIn0, pValid0, dataIn1, pValid1, nReady0)
+VAR
+d0 : delay0c_1_1(FALSE, j0.valid0, nReady0);
+j0 : _join_2_1(pValid0, pValid1, d0.ready0);
+DEFINE
+valid0   := d0.valid0;
+dataOut0 := d0.dataOut0;
+num      := d0.num;
+
+ready0 := j0.ready0;
+
+ready1 := j0.ready1;
+
+#ifndef WRITE_JOIN_2
+#define WRITE_JOIN_2
+MODULE _join_2_1(pValid0, pValid1, nReady0)
+DEFINE ready0 := nReady0 & pValid1;
+DEFINE ready1 := nReady0 & pValid0;
+DEFINE valid0 := pValid0 & pValid1;
+
+#endif // WRITE_JOIN_2
+
+#ifndef __DELAY0C_1_1
+#define __DELAY0C_1_1
+MODULE delay0c_1_1 (dataIn0, pValid0, nReady0)
+
+DEFINE
+dataOut0 := dataIn0;
+valid0   := pValid0;
+ready0   := nReady0;
+num      := 0;
+
+#endif
+
+#endif // WRITE_OPERATOR_2_1_0
+
+
+#ifndef WRITE_BUFFER_FIFO_BASED_FALSE_2
+#define WRITE_BUFFER_FIFO_BASED_FALSE_2
+
+MODULE buffer2o_1_1(dataIn0, pValid0, nReady0)
+VAR
+b : elasticBuffer_1_1(dataIn0, pValid0, nReady0);
+DEFINE
+dataOut0 := b.dataOut0;
+valid0   := b.valid0;
+ready0   := b.ready0;
+num := count(b.b0.valid0, b.b1.full);
+numplus := count(b.b0.valid0 & b.b0.dataOut0, b.b1.full & b.b1.dataOut0);
+numminus := count(b.b0.valid0 & !b.b0.dataOut0, b.b1.full & !b.b1.dataOut0);
+
+#endif // WRITE_BUFFER_FIFO_BASED_FALSE_2
+
+
+#ifndef WRITE_BUFFER_SLOT_BASED_FALSE_2
+#define WRITE_BUFFER_SLOT_BASED_FALSE_2
+
+MODULE _buffer2o_1_1(dataIn0, pValid0, nReady0)
+VAR
+b0     : tehb_1_1(dataIn0, pValid0, b1.ready0);
+b1     : oehb_1_1(b0.dataOut0, b0.valid0, nReady0);
+DEFINE 
+dataOut0 := b1.dataOut0;
+valid0 := b1.valid0;
+ready0 := b0.ready0;
+
+#endif // WRITE_BUFFER_SLOT_BASED_FALSE_2
+
+MODULE mc_x_1_2(dataIn0, pValid0, nReady0, nReady1)
+DEFINE dataOut0 := FALSE;
+DEFINE valid0 := TRUE;
+DEFINE dataOut1 := FALSE;
+DEFINE valid1 := TRUE;
+
+DEFINE ready0 := FALSE;
+MODULE mc_y_4_2(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, dataIn3, pValid3, nReady0, nReady1)
+DEFINE dataOut0 := FALSE;
+DEFINE valid0 := TRUE;
+DEFINE dataOut1 := FALSE;
+DEFINE valid1 := TRUE;
+
+DEFINE ready0 := TRUE;
+
+DEFINE ready1 := FALSE;
+
+DEFINE ready2 := FALSE;
+
+DEFINE ready3 := FALSE;
+
+
+// parametrized.smv
+#pragma once
+
+
+
+#ifndef WRITE_FORK_5
+#define WRITE_FORK_5
+MODULE fork_1_5(dataIn0, pValid0, nReady0, nReady1, nReady2, nReady3, nReady4)DEFINE forkStop := regBlock0.blockStop | regBlock1.blockStop | regBlock2.blockStop | regBlock3.blockStop | regBlock4.blockStop;pValidAndForkStop := pValid0 & forkStop;
+ready0 := !forkStop;
+
+VAR regBlock0 : eagerFork_RegisterBlock(pValid0, nStop0, pValidAndForkStop);
+DEFINE nStop0      := !nReady0;
+DEFINE valid0      := regBlock0.valid;
+DEFINE dataOut0    := dataIn0;
+DEFINE sent0       := !regBlock0.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus0  := !regBlock0.reg_value & dataIn0; 
+DEFINE sent_minus0 := !regBlock0.reg_value & !dataIn0; 
+DEFINE efr0 := (regBlock0.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus0 := (dataIn0 -> regBlock0.reg_value); // 
+DEFINE efr_minus0 := ((!dataIn0) -> regBlock0.reg_value); // 
+
+VAR regBlock1 : eagerFork_RegisterBlock(pValid0, nStop1, pValidAndForkStop);
+DEFINE nStop1      := !nReady1;
+DEFINE valid1      := regBlock1.valid;
+DEFINE dataOut1    := dataIn0;
+DEFINE sent1       := !regBlock1.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus1  := !regBlock1.reg_value & dataIn0; 
+DEFINE sent_minus1 := !regBlock1.reg_value & !dataIn0; 
+DEFINE efr1 := (regBlock1.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus1 := (dataIn0 -> regBlock1.reg_value); // 
+DEFINE efr_minus1 := ((!dataIn0) -> regBlock1.reg_value); // 
+
+VAR regBlock2 : eagerFork_RegisterBlock(pValid0, nStop2, pValidAndForkStop);
+DEFINE nStop2      := !nReady2;
+DEFINE valid2      := regBlock2.valid;
+DEFINE dataOut2    := dataIn0;
+DEFINE sent2       := !regBlock2.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus2  := !regBlock2.reg_value & dataIn0; 
+DEFINE sent_minus2 := !regBlock2.reg_value & !dataIn0; 
+DEFINE efr2 := (regBlock2.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus2 := (dataIn0 -> regBlock2.reg_value); // 
+DEFINE efr_minus2 := ((!dataIn0) -> regBlock2.reg_value); // 
+
+VAR regBlock3 : eagerFork_RegisterBlock(pValid0, nStop3, pValidAndForkStop);
+DEFINE nStop3      := !nReady3;
+DEFINE valid3      := regBlock3.valid;
+DEFINE dataOut3    := dataIn0;
+DEFINE sent3       := !regBlock3.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus3  := !regBlock3.reg_value & dataIn0; 
+DEFINE sent_minus3 := !regBlock3.reg_value & !dataIn0; 
+DEFINE efr3 := (regBlock3.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus3 := (dataIn0 -> regBlock3.reg_value); // 
+DEFINE efr_minus3 := ((!dataIn0) -> regBlock3.reg_value); // 
+
+VAR regBlock4 : eagerFork_RegisterBlock(pValid0, nStop4, pValidAndForkStop);
+DEFINE nStop4      := !nReady4;
+DEFINE valid4      := regBlock4.valid;
+DEFINE dataOut4    := dataIn0;
+DEFINE sent4       := !regBlock4.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus4  := !regBlock4.reg_value & dataIn0; 
+DEFINE sent_minus4 := !regBlock4.reg_value & !dataIn0; 
+DEFINE efr4 := (regBlock4.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus4 := (dataIn0 -> regBlock4.reg_value); // 
+DEFINE efr_minus4 := ((!dataIn0) -> regBlock4.reg_value); // 
+
+#endif // WRITE_FORK_5
+
+
+#ifndef WRITE_OPERATOR_2_1_2
+#define WRITE_OPERATOR_2_1_2
+
+MODULE operator2c_2_1(dataIn0, pValid0, dataIn1, pValid1, nReady0)
+VAR
+d0 : delay2c_1_1(FALSE, j0.valid0, nReady0);
+j0 : _join_2_1(pValid0, pValid1, d0.ready0);
+DEFINE
+valid0   := d0.valid0;
+dataOut0 := d0.dataOut0;
+num      := d0.num;
+
+ready0 := j0.ready0;
+
+ready1 := j0.ready1;
+
+#ifndef WRITE_JOIN_2
+#define WRITE_JOIN_2
+MODULE _join_2_1(pValid0, pValid1, nReady0)
+DEFINE ready0 := nReady0 & pValid1;
+DEFINE ready1 := nReady0 & pValid0;
+DEFINE valid0 := pValid0 & pValid1;
+
+#endif // WRITE_JOIN_2
+
+#ifndef __DELAY2C_1_1
+#define __DELAY2C_1_1
+MODULE delay2c_1_1 (dataIn0, pValid0, nReady0)
+
+VAR oehb0 : oehb_1_1(dataIn0, v1, nReady0);
+DEFINE v0 := pValid0;
+
+VAR v1 : boolean;
+ASSIGN init(v1) := FALSE;
+ASSIGN next(v1) := oehb0.ready0 ? v0 : v1;
+
+DEFINE dataOut0 := FALSE;
+DEFINE valid0   := oehb0.valid0;
+DEFINE ready0   := oehb0.ready0;
+DEFINE v2   := oehb0.valid0;
+
+DEFINE num := count(oehb0.valid0, v1);
+
+DEFINE v1.num := toint(v1);
+DEFINE v1.full := v1;
+
+DEFINE v2.num := toint(v2);
+DEFINE v2.full := v2;
+
+#endif
+
+#endif // WRITE_OPERATOR_2_1_2
+
+
+#ifndef WRITE_DECIDER_2_1_0
+#define WRITE_DECIDER_2_1_0
+
+#ifndef __DELAY0C_1_1
+#define __DELAY0C_1_1
+MODULE delay0c_1_1 (dataIn0, pValid0, nReady0)
+
+DEFINE
+dataOut0 := dataIn0;
+valid0   := pValid0;
+ready0   := nReady0;
+num      := 0;
+
+#endif
+
+MODULE decider0c_2_1(dataIn0, pValid0, dataIn1, pValid1, nReady0)
+VAR
+j0   : join_2_1 (pValid0, pValid1, d0.ready0);
+d0   : delay0c_1_1 (FALSE, j0.valid0, ndd0.ready0);
+ndd0 : ndd_1_1 (d0.dataOut0, d0.valid0, nReady0);
+
+DEFINE
+valid0   := ndd0.valid0;
+dataOut0 := ndd0.dataOut0;
+ready0   := j0.ready0;
+ready1   := j0.ready1;
+num      := d0.num; 
+
+MODULE redecider0c_2_1(dataIn0, pValid0, dataIn1, pValid1, nReady0)
+VAR
+j0   : join_2_1 (pValid0, pValid1, d0.ready0);
+d0   : delay0c_1_1 (FALSE, j0.valid0, ndd0.ready0);
+ndd0 : rendd_1_1 (d0.dataOut0, d0.valid0, nReady0);
+
+DEFINE
+valid0   := ndd0.valid0;
+dataOut0 := ndd0.dataOut0;
+ready0   := j0.ready0;
+ready1   := j0.ready1;
+num      := d0.num; 
+
+#endif // WRITE_DECIDER_2_1_0
+
+
+#ifndef WRITE_BUFFER_FIFO_BASED_TRUE_1
+#define WRITE_BUFFER_FIFO_BASED_TRUE_1
+
+MODULE buffer1t_1_1(dataIn0, pValid0, nReady0)
+VAR
+b : tehb_1_1(dataIn0, pValid0, nReady0);
+DEFINE
+dataOut0 := b.dataOut0;
+valid0   := b.valid0;
+ready0   := b.ready0;
+num := count(b.full);
+numplus := count(b.full & b.dataOut0);
+numminus := count(b.full & !b.dataOut0);
+
+#endif // WRITE_BUFFER_FIFO_BASED_TRUE_1
+
+
+#ifndef WRITE_BUFFER_SLOT_BASED_TRUE_1
+#define WRITE_BUFFER_SLOT_BASED_TRUE_1
+
+MODULE _buffer1t_1_1(dataIn0, pValid0, nReady0)
+VAR
+b0 : tehb_1_1(dataIn0, pValid0, nReady0);
+DEFINE
+dataOut0 := b0.dataOut0;
+valid0   := b0.valid0;
+ready0   := b0.ready0;
+
+#endif // WRITE_BUFFER_SLOT_BASED_TRUE_1
+
+
+#ifndef WRITE_FORK_4
+#define WRITE_FORK_4
+MODULE fork_1_4(dataIn0, pValid0, nReady0, nReady1, nReady2, nReady3)DEFINE forkStop := regBlock0.blockStop | regBlock1.blockStop | regBlock2.blockStop | regBlock3.blockStop;pValidAndForkStop := pValid0 & forkStop;
+ready0 := !forkStop;
+
+VAR regBlock0 : eagerFork_RegisterBlock(pValid0, nStop0, pValidAndForkStop);
+DEFINE nStop0      := !nReady0;
+DEFINE valid0      := regBlock0.valid;
+DEFINE dataOut0    := dataIn0;
+DEFINE sent0       := !regBlock0.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus0  := !regBlock0.reg_value & dataIn0; 
+DEFINE sent_minus0 := !regBlock0.reg_value & !dataIn0; 
+DEFINE efr0 := (regBlock0.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus0 := (dataIn0 -> regBlock0.reg_value); // 
+DEFINE efr_minus0 := ((!dataIn0) -> regBlock0.reg_value); // 
+
+VAR regBlock1 : eagerFork_RegisterBlock(pValid0, nStop1, pValidAndForkStop);
+DEFINE nStop1      := !nReady1;
+DEFINE valid1      := regBlock1.valid;
+DEFINE dataOut1    := dataIn0;
+DEFINE sent1       := !regBlock1.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus1  := !regBlock1.reg_value & dataIn0; 
+DEFINE sent_minus1 := !regBlock1.reg_value & !dataIn0; 
+DEFINE efr1 := (regBlock1.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus1 := (dataIn0 -> regBlock1.reg_value); // 
+DEFINE efr_minus1 := ((!dataIn0) -> regBlock1.reg_value); // 
+
+VAR regBlock2 : eagerFork_RegisterBlock(pValid0, nStop2, pValidAndForkStop);
+DEFINE nStop2      := !nReady2;
+DEFINE valid2      := regBlock2.valid;
+DEFINE dataOut2    := dataIn0;
+DEFINE sent2       := !regBlock2.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus2  := !regBlock2.reg_value & dataIn0; 
+DEFINE sent_minus2 := !regBlock2.reg_value & !dataIn0; 
+DEFINE efr2 := (regBlock2.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus2 := (dataIn0 -> regBlock2.reg_value); // 
+DEFINE efr_minus2 := ((!dataIn0) -> regBlock2.reg_value); // 
+
+VAR regBlock3 : eagerFork_RegisterBlock(pValid0, nStop3, pValidAndForkStop);
+DEFINE nStop3      := !nReady3;
+DEFINE valid3      := regBlock3.valid;
+DEFINE dataOut3    := dataIn0;
+DEFINE sent3       := !regBlock3.reg_value; // output i is running-ahead of the other blocks
+DEFINE sent_plus3  := !regBlock3.reg_value & dataIn0; 
+DEFINE sent_minus3 := !regBlock3.reg_value & !dataIn0; 
+DEFINE efr3 := (regBlock3.reg_value); // output i is not running-ahead of the other blocks
+DEFINE efr_plus3 := (dataIn0 -> regBlock3.reg_value); // 
+DEFINE efr_minus3 := ((!dataIn0) -> regBlock3.reg_value); // 
+
+#endif // WRITE_FORK_4
+
+
+MODULE exit_3_0(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2)
+
+DEFINE program_return := case
+
+pValid2 : TRUE;
+
+TRUE : FALSE;
+esac;
+
+VAR b0 : tehb_1_1(TRUE, program_return, FALSE);
+DEFINE num := b0.num;
+DEFINE full := b0.full;
+
+DEFINE ready0 := FALSE;
+
+DEFINE ready1 := FALSE;
+
+DEFINE ready2 := b0.ready0;
+
+
+-- model netlist
+
+
+
+MODULE main
+
+VAR phi_2 : mux_3_1(fork_11.dataOut0, fork_11.valid0, branch_0.dataOut0, branch_0.valid0, branch_4.dataOut0, branch_4.valid0, _Buffer_1.ready0);
+VAR phi_3 : mux_3_1(fork_11.dataOut1, fork_11.valid1, branch_1.dataOut0, branch_1.valid0, branch_5.dataOut0, branch_5.valid0, fork_0.ready0);
+VAR mul_4 : operator2c_2_1(_Buffer_1.dataOut0, _Buffer_1.valid0, fork_3.dataOut0, fork_3.valid0, add_9.ready0);
+VAR load_7 : mc_load_op_2_2(MC_x.dataOut0, MC_x.valid0, fork_0.dataOut1, fork_0.valid1, mul_8.ready0, MC_x.ready0);
+VAR mul_8 : operator2c_2_1(load_7.dataOut0, load_7.valid0, fork_4.dataOut0, fork_4.valid0, add_9.ready1);
+VAR add_9 : operator0c_2_1(mul_4.dataOut0, mul_4.valid0, mul_8.dataOut0, mul_8.valid0, fork_1.ready0);
+VAR store_0 : mc_store_op_2_2(fork_1.dataOut0, fork_1.valid0, _Buffer_2.dataOut0, _Buffer_2.valid0, MC_y.ready3, MC_y.ready2);
+VAR cst_1 : constant_1_1(TRUE, source_0.valid0, add_12.ready1);
+VAR add_12 : operator0c_2_1(_Buffer_3.dataOut0, _Buffer_3.valid0, cst_1.dataOut0, cst_1.valid0, fork_2.ready0);
+VAR cst_2 : constant_1_1(TRUE, source_1.valid0, icmp_13.ready1);
+VAR icmp_13 : redecider0c_2_1(fork_2.dataOut0, fork_2.valid0, cst_2.dataOut0, cst_2.valid0, fork_6.ready0);
+VAR phi_n0 : merge_2_1(branch_2.dataOut0, branch_2.valid0, branch_6.dataOut0, branch_6.valid0, fork_3.ready0);
+VAR phi_n1 : merge_2_1(branch_3.dataOut0, branch_3.valid0, branch_7.dataOut0, branch_7.valid0, fork_4.ready0);
+VAR fork_0 : fork_1_3(phi_3.dataOut0, phi_3.valid0, _Buffer_3.ready0, load_7.ready1, _Buffer_2.ready0);
+VAR fork_1 : fork_1_2(add_9.dataOut0, add_9.valid0, store_0.ready0, branch_4.ready0);
+VAR fork_2 : fork_1_2(add_12.dataOut0, add_12.valid0, icmp_13.ready0, branch_5.ready0);
+VAR fork_3 : fork_1_2(phi_n0.dataOut0, phi_n0.valid0, mul_4.ready1, _Buffer_4.ready0);
+VAR fork_4 : fork_1_2(phi_n1.dataOut0, phi_n1.valid0, mul_8.ready1, _Buffer_5.ready0);
+VAR branch_4 : branch_2_2(fork_1.dataOut1, fork_1.valid1, fork_6.dataOut3, fork_6.valid3, phi_2.ready2, sink_4.ready0);
+VAR branch_5 : branch_2_2(fork_2.dataOut1, fork_2.valid1, fork_6.dataOut2, fork_6.valid2, phi_3.ready2, sink_5.ready0);
+VAR branch_6 : branch_2_2(_Buffer_4.dataOut0, _Buffer_4.valid0, fork_6.dataOut1, fork_6.valid1, phi_n0.ready1, sink_6.ready0);
+VAR branch_7 : branch_2_2(_Buffer_5.dataOut0, _Buffer_5.valid0, fork_6.dataOut0, fork_6.valid0, phi_n1.ready1, sink_7.ready0);
+VAR fork_6 : fork_1_5(icmp_13.dataOut0, icmp_13.valid0, branch_7.ready1, branch_6.ready1, branch_5.ready1, branch_4.ready1, branchC_9.ready1);
+VAR cst_4 : constant_1_1(TRUE, forkC_9.valid0, MC_y.ready0);
+VAR phiC_2 : cntrlmerge_2_2(branchC_8.dataOut0, branchC_8.valid0, branchC_9.dataOut0, branchC_9.valid0, _Buffer_6.ready0, fork_11.ready0);
+VAR forkC_9 : fork_1_2(_Buffer_6.dataOut0, _Buffer_6.valid0, cst_4.ready0, branchC_9.ready0);
+VAR branchC_9 : branch_2_2(forkC_9.dataOut1, forkC_9.valid1, fork_6.dataOut4, fork_6.valid4, phiC_2.ready1, phiC_3.ready0);
+VAR source_0 : source_0_1(cst_1.ready0);
+VAR source_1 : source_0_1(cst_2.ready0);
+VAR fork_11 : fork_1_2(phiC_2.dataOut1, phiC_2.valid1, phi_2.ready0, phi_3.ready0);
+VAR _Buffer_1 : _buffer1o_1_1(phi_2.dataOut0, phi_2.valid0, mul_4.ready0);
+VAR _Buffer_2 : _buffer1t_1_1(fork_0.dataOut2, fork_0.valid2, store_0.ready1);
+VAR _Buffer_3 : _buffer2o_1_1(fork_0.dataOut0, fork_0.valid0, add_12.ready0);
+VAR _Buffer_4 : _buffer1o_1_1(fork_3.dataOut1, fork_3.valid1, branch_6.ready0);
+VAR _Buffer_5 : _buffer1o_1_1(fork_4.dataOut1, fork_4.valid1, branch_7.ready0);
+VAR _Buffer_6 : _buffer2o_1_1(phiC_2.dataOut0, phiC_2.valid0, forkC_9.ready0);
+VAR a : entry_0_1(branch_2.ready0);
+VAR b : entry_0_1(branch_3.ready0);
+VAR load_0 : mc_load_op_2_2(MC_y.dataOut0, MC_y.valid0, cst_3.dataOut0, cst_3.valid0, branch_0.ready0, MC_y.ready1);
+VAR brCst_block1 : constant_1_1(TRUE, forkC_8.valid3, fork_5.ready0);
+VAR cst_0 : constant_1_1(TRUE, forkC_8.valid0, branch_1.ready0);
+VAR cst_3 : constant_1_1(FALSE, forkC_8.valid1, load_0.ready1);
+VAR branch_0 : branch_2_2(load_0.dataOut0, load_0.valid0, fork_5.dataOut3, fork_5.valid3, phi_2.ready1, sink_0.ready0);
+VAR branch_1 : branch_2_2(cst_0.dataOut0, cst_0.valid0, fork_5.dataOut2, fork_5.valid2, phi_3.ready1, sink_1.ready0);
+VAR branch_2 : branch_2_2(a.dataOut0, a.valid0, fork_5.dataOut1, fork_5.valid1, phi_n0.ready0, sink_2.ready0);
+VAR branch_3 : branch_2_2(b.dataOut0, b.valid0, fork_5.dataOut0, fork_5.valid0, phi_n1.ready0, sink_3.ready0);
+VAR fork_5 : fork_1_5(brCst_block1.dataOut0, brCst_block1.valid0, branch_3.ready1, branch_2.ready1, branch_1.ready1, branch_0.ready1, branchC_8.ready1);
+VAR start_0 : entry_0_1(forkC_8.ready0);
+VAR forkC_8 : fork_1_4(start_0.dataOut0, start_0.valid0, cst_0.ready0, cst_3.ready0, branchC_8.ready0, brCst_block1.ready0);
+VAR branchC_8 : branch_2_2(forkC_8.dataOut2, forkC_8.valid2, fork_5.dataOut4, fork_5.valid4, phiC_2.ready0, sink_8.ready0);
+VAR ret_0 : tehb_1_1(phiC_3.dataOut0, phiC_3.valid0, end_0.ready2);
+VAR phiC_3 : merge_1_1(branchC_9.dataOut1, branchC_9.valid1, ret_0.ready0);
+VAR MC_x : mc_x_1_2(load_7.dataOut1, load_7.valid1, load_7.ready0, end_0.ready1);
+VAR MC_y : mc_y_4_2(cst_4.dataOut0, cst_4.valid0, load_0.dataOut1, load_0.valid1, store_0.dataOut1, store_0.valid1, store_0.dataOut0, store_0.valid0, load_0.ready0, end_0.ready0);
+VAR sink_4 : sink_1_0(branch_4.dataOut1, branch_4.valid1);
+VAR sink_5 : sink_1_0(branch_5.dataOut1, branch_5.valid1);
+VAR sink_6 : sink_1_0(branch_6.dataOut1, branch_6.valid1);
+VAR sink_7 : sink_1_0(branch_7.dataOut1, branch_7.valid1);
+VAR sink_0 : sink_1_0(branch_0.dataOut1, branch_0.valid1);
+VAR sink_1 : sink_1_0(branch_1.dataOut1, branch_1.valid1);
+VAR sink_2 : sink_1_0(branch_2.dataOut1, branch_2.valid1);
+VAR sink_3 : sink_1_0(branch_3.dataOut1, branch_3.valid1);
+VAR sink_8 : sink_1_0(branchC_8.dataOut1, branchC_8.valid1);
+VAR end_0 : exit_3_0(MC_y.dataOut1, MC_y.valid1, MC_x.dataOut1, MC_x.valid1, ret_0.dataOut0, ret_0.valid0);
+
+-- set of assumptions
+
+INVAR ((load_7.ndw0.state) = running);
+INVAR ((load_7.b0.valid0) -> ((load_7.ndw0.state = running)));
+INVAR ((load_0.ndw0.state) = running);
+INVAR ((load_0.b0.valid0) -> ((load_0.ndw0.state = running)));
+INVAR ((store_0.ndw0.state) = running);
+INVAR ((store_0.j.valid0) -> (store_0.ndw0.state = running));
+
+INVARSPEC NAME inv_no_stall_phi_2_nReadyArray_0 := (phi_2.valid0 -> _Buffer_1.ready0);
+INVARSPEC NAME inv_no_stall_phi_3_nReadyArray_0 := (phi_3.valid0 -> fork_0.ready0);
+INVARSPEC NAME inv_no_stall_mul_4_nReadyArray_0 := (mul_4.valid0 -> add_9.ready0);
+INVARSPEC NAME inv_no_stall_load_7_nReadyArray_0 := (load_7.valid0 -> mul_8.ready0);
+INVARSPEC NAME inv_no_stall_mul_8_nReadyArray_0 := (mul_8.valid0 -> add_9.ready1);
+INVARSPEC NAME inv_no_stall_add_9_nReadyArray_0 := (add_9.valid0 -> fork_1.ready0);
+INVARSPEC NAME inv_no_stall_add_12_nReadyArray_0 := (add_12.valid0 -> fork_2.ready0);
+INVARSPEC NAME inv_no_stall_icmp_13_nReadyArray_0 := (icmp_13.valid0 -> fork_6.ready0);
+INVARSPEC NAME inv_no_stall_phi_n0_nReadyArray_0 := (phi_n0.valid0 -> fork_3.ready0);
+INVARSPEC NAME inv_no_stall_phi_n1_nReadyArray_0 := (phi_n1.valid0 -> fork_4.ready0);
+INVARSPEC NAME inv_no_stall_fork_0_nReadyArray_1 := (fork_0.valid1 -> load_7.ready1);
+INVARSPEC NAME inv_no_stall_fork_0_nReadyArray_2 := (fork_0.valid2 -> _Buffer_2.ready0);
+INVARSPEC NAME inv_no_stall_fork_0_nReadyArray_0 := (fork_0.valid0 -> _Buffer_3.ready0);
+INVARSPEC NAME inv_no_stall_fork_1_nReadyArray_0 := (fork_1.valid0 -> store_0.ready0);
+INVARSPEC NAME inv_no_stall_fork_1_nReadyArray_1 := (fork_1.valid1 -> branch_4.ready0);
+INVARSPEC NAME inv_no_stall_fork_2_nReadyArray_0 := (fork_2.valid0 -> icmp_13.ready0);
+INVARSPEC NAME inv_no_stall_fork_2_nReadyArray_1 := (fork_2.valid1 -> branch_5.ready0);
+INVARSPEC NAME inv_no_stall_fork_3_nReadyArray_0 := (fork_3.valid0 -> mul_4.ready1);
+INVARSPEC NAME inv_no_stall_fork_3_nReadyArray_1 := (fork_3.valid1 -> _Buffer_4.ready0);
+INVARSPEC NAME inv_no_stall_fork_4_nReadyArray_0 := (fork_4.valid0 -> mul_8.ready1);
+INVARSPEC NAME inv_no_stall_fork_4_nReadyArray_1 := (fork_4.valid1 -> _Buffer_5.ready0);
+INVARSPEC NAME inv_no_stall_branch_4_nReadyArray_0 := (branch_4.valid0 -> phi_2.ready2);
+INVARSPEC NAME inv_no_stall_branch_4_nReadyArray_1 := (branch_4.valid1 -> sink_4.ready0);
+INVARSPEC NAME inv_no_stall_branch_5_nReadyArray_0 := (branch_5.valid0 -> phi_3.ready2);
+INVARSPEC NAME inv_no_stall_branch_5_nReadyArray_1 := (branch_5.valid1 -> sink_5.ready0);
+INVARSPEC NAME inv_no_stall_branch_6_nReadyArray_0 := (branch_6.valid0 -> phi_n0.ready1);
+INVARSPEC NAME inv_no_stall_branch_6_nReadyArray_1 := (branch_6.valid1 -> sink_6.ready0);
+INVARSPEC NAME inv_no_stall_branch_7_nReadyArray_0 := (branch_7.valid0 -> phi_n1.ready1);
+INVARSPEC NAME inv_no_stall_branch_7_nReadyArray_1 := (branch_7.valid1 -> sink_7.ready0);
+INVARSPEC NAME inv_no_stall_fork_6_nReadyArray_3 := (fork_6.valid3 -> branch_4.ready1);
+INVARSPEC NAME inv_no_stall_fork_6_nReadyArray_2 := (fork_6.valid2 -> branch_5.ready1);
+INVARSPEC NAME inv_no_stall_fork_6_nReadyArray_1 := (fork_6.valid1 -> branch_6.ready1);
+INVARSPEC NAME inv_no_stall_fork_6_nReadyArray_0 := (fork_6.valid0 -> branch_7.ready1);
+INVARSPEC NAME inv_no_stall_fork_6_nReadyArray_4 := (fork_6.valid4 -> branchC_9.ready1);
+INVARSPEC NAME inv_no_stall_cst_4_nReadyArray_0 := (cst_4.valid0 -> MC_y.ready0);
+INVARSPEC NAME inv_no_stall_phiC_2_nReadyArray_1 := (phiC_2.valid1 -> fork_11.ready0);
+INVARSPEC NAME inv_no_stall_phiC_2_nReadyArray_0 := (phiC_2.valid0 -> _Buffer_6.ready0);
+INVARSPEC NAME inv_no_stall_forkC_9_nReadyArray_0 := (forkC_9.valid0 -> cst_4.ready0);
+INVARSPEC NAME inv_no_stall_forkC_9_nReadyArray_1 := (forkC_9.valid1 -> branchC_9.ready0);
+INVARSPEC NAME inv_no_stall_branchC_9_nReadyArray_0 := (branchC_9.valid0 -> phiC_2.ready1);
+INVARSPEC NAME inv_no_stall_branchC_9_nReadyArray_1 := (branchC_9.valid1 -> phiC_3.ready0);
+INVARSPEC NAME inv_no_stall_fork_11_nReadyArray_0 := (fork_11.valid0 -> phi_2.ready0);
+INVARSPEC NAME inv_no_stall_fork_11_nReadyArray_1 := (fork_11.valid1 -> phi_3.ready0);
+INVARSPEC NAME inv_no_stall__Buffer_1_nReadyArray_0 := (_Buffer_1.valid0 -> mul_4.ready0);
+INVARSPEC NAME inv_no_stall__Buffer_2_nReadyArray_0 := (_Buffer_2.valid0 -> store_0.ready1);
+INVARSPEC NAME inv_no_stall__Buffer_3_nReadyArray_0 := (_Buffer_3.valid0 -> add_12.ready0);
+INVARSPEC NAME inv_no_stall__Buffer_4_nReadyArray_0 := (_Buffer_4.valid0 -> branch_6.ready0);
+INVARSPEC NAME inv_no_stall__Buffer_5_nReadyArray_0 := (_Buffer_5.valid0 -> branch_7.ready0);
+INVARSPEC NAME inv_no_stall__Buffer_6_nReadyArray_0 := (_Buffer_6.valid0 -> forkC_9.ready0);
+INVARSPEC NAME inv_no_stall_a_nReadyArray_0 := (a.valid0 -> branch_2.ready0);
+INVARSPEC NAME inv_no_stall_b_nReadyArray_0 := (b.valid0 -> branch_3.ready0);
+INVARSPEC NAME inv_no_stall_load_0_nReadyArray_0 := (load_0.valid0 -> branch_0.ready0);
+INVARSPEC NAME inv_no_stall_brCst_block1_nReadyArray_0 := (brCst_block1.valid0 -> fork_5.ready0);
+INVARSPEC NAME inv_no_stall_cst_0_nReadyArray_0 := (cst_0.valid0 -> branch_1.ready0);
+INVARSPEC NAME inv_no_stall_cst_3_nReadyArray_0 := (cst_3.valid0 -> load_0.ready1);
+INVARSPEC NAME inv_no_stall_branch_0_nReadyArray_0 := (branch_0.valid0 -> phi_2.ready1);
+INVARSPEC NAME inv_no_stall_branch_0_nReadyArray_1 := (branch_0.valid1 -> sink_0.ready0);
+INVARSPEC NAME inv_no_stall_branch_1_nReadyArray_0 := (branch_1.valid0 -> phi_3.ready1);
+INVARSPEC NAME inv_no_stall_branch_1_nReadyArray_1 := (branch_1.valid1 -> sink_1.ready0);
+INVARSPEC NAME inv_no_stall_branch_2_nReadyArray_0 := (branch_2.valid0 -> phi_n0.ready0);
+INVARSPEC NAME inv_no_stall_branch_2_nReadyArray_1 := (branch_2.valid1 -> sink_2.ready0);
+INVARSPEC NAME inv_no_stall_branch_3_nReadyArray_0 := (branch_3.valid0 -> phi_n1.ready0);
+INVARSPEC NAME inv_no_stall_branch_3_nReadyArray_1 := (branch_3.valid1 -> sink_3.ready0);
+INVARSPEC NAME inv_no_stall_fork_5_nReadyArray_3 := (fork_5.valid3 -> branch_0.ready1);
+INVARSPEC NAME inv_no_stall_fork_5_nReadyArray_2 := (fork_5.valid2 -> branch_1.ready1);
+INVARSPEC NAME inv_no_stall_fork_5_nReadyArray_1 := (fork_5.valid1 -> branch_2.ready1);
+INVARSPEC NAME inv_no_stall_fork_5_nReadyArray_0 := (fork_5.valid0 -> branch_3.ready1);
+INVARSPEC NAME inv_no_stall_fork_5_nReadyArray_4 := (fork_5.valid4 -> branchC_8.ready1);
+INVARSPEC NAME inv_no_stall_start_0_nReadyArray_0 := (start_0.valid0 -> forkC_8.ready0);
+INVARSPEC NAME inv_no_stall_forkC_8_nReadyArray_3 := (forkC_8.valid3 -> brCst_block1.ready0);
+INVARSPEC NAME inv_no_stall_forkC_8_nReadyArray_0 := (forkC_8.valid0 -> cst_0.ready0);
+INVARSPEC NAME inv_no_stall_forkC_8_nReadyArray_1 := (forkC_8.valid1 -> cst_3.ready0);
+INVARSPEC NAME inv_no_stall_forkC_8_nReadyArray_2 := (forkC_8.valid2 -> branchC_8.ready0);
+INVARSPEC NAME inv_no_stall_branchC_8_nReadyArray_0 := (branchC_8.valid0 -> phiC_2.ready0);
+INVARSPEC NAME inv_no_stall_branchC_8_nReadyArray_1 := (branchC_8.valid1 -> sink_8.ready0);
+INVARSPEC NAME inv_no_stall_phiC_3_nReadyArray_0 := (phiC_3.valid0 -> ret_0.ready0);
