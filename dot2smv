@@ -35,6 +35,27 @@ time;
 quit
 '''
 
+trace_text = '''
+set verbose_level 0;
+set pp_list cpp;
+set counter_examples 1;
+set dynamic_reorder 1;
+set on_failure_script_quits;
+set reorder_method sift;
+set enable_sexp2bdd_caching 0;
+set bdd_static_order_heuristics basic;
+set cone_of_influence;
+set use_coi_size_sorting 1;
+read_model -i model.smv;
+flatten_hierarchy;
+encode_variables;
+build_flat_model;
+build_model -f;
+check_invar -s forward;
+show_traces -a -p 4 -o dbg_model.xml;
+quit
+'''
+
 def generate_model(dfg):
     model_text = ''
     model_text += elastic_components + '\n'
@@ -67,10 +88,19 @@ if __name__ == "__main__":
     #prop_text = "-- list of properties to check\n"
     prop_text = check_valid_not_ready(dfg)
 
+    # -- Generate the model for verification -- #
     f_smv_model = d_smv / 'model.smv'
     with open(f_smv_model, 'w') as f:
         f.write(model_text)
         f.write(prop_text)
+
+    # -- Generate the script for verification -- #
     f_smv_script = d_smv / 'prove.cmd'
     with open(f_smv_script, 'w') as f:
         f.write(re.sub(r'^\t+','',script_text, flags=re.MULTILINE))
+
+    # -- Generate the script for trace generation -- #
+    f_dbg_script = d_smv / 'trace.cmd'
+    with open(f_dbg_script, 'w') as f:
+        f.write(re.sub(r'^\t+','',trace_text, flags=re.MULTILINE))
+

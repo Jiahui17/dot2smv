@@ -1,0 +1,89 @@
+#!/bin/env python3
+
+""" This is a script that converts the nuXmv traces and a DOT netlist to a
+visualized trace.  """
+
+
+import os, re, argparse, sys, subprocess
+
+
+def run(*args, **kwargs):
+    # make sure the output are in order
+    sys.stdout.flush()
+    # check=True: raise Exception when child process has non-zero return code
+    return subprocess.run(*args, **kwargs, check=True)
+
+
+import pygraphviz as pgv
+import xml.etree.ElementTree as ET
+from glob import glob
+from pathlib import Path
+from sys import argv
+
+
+def trace2pdfs(dotfile, tracefile):
+    for state in ET.parse(tracefile).getroot().findall("node/state"):
+        # one figure per each state
+        gv = pgv.AGraph(dotfile, strict=False, directed=True)
+        for variable in state.findall("value"):
+            # get the signal name in the smv module tree structure
+            # module_name
+            match = re.search(
+                r"^(\w+)\.(valid|ready)(\d+)", variable.get("variable")
+            )
+            value = variable.text  # get the actual value of the signal
+            if match and match[2] == "valid":
+                if value == "TRUE":
+                    gv.get_node(match[1]).attr["style"] = "filled"
+                    gv.get_node(match[1]).attr["fillcolor"] = "goldenrod1"
+                gv.get_node(match[1]).attr["valid" + match[3]] = variable.text
+            if match and match[2] == "ready":
+                gv.get_node(match[1]).attr["ready" + match[3]] = variable.text
+
+        for e in map(lambda e: gv.get_edge(*e), gv.edges(keys=True)):
+            valid = "valid" + str(
+                int(re.search(r"\d+", e.attr["from"]).group(0)) - 1
+            )
+            ready = "ready" + str(
+                int(re.search(r"\d+", e.attr["to"]).group(0)) - 1
+            )
+            p = gv.get_node(e[0])
+            s = gv.get_node(e[1])
+            if (
+                p.attr.get(valid, "") == "TRUE"
+                and s.attr.get(ready, "") == "TRUE"
+            ):
+                e.attr["color"] = "x11green"
+                e.attr["penwidth"] = "4.5"
+            elif (
+                p.attr.get(valid, "") == "TRUE"
+                and s.attr.get(ready, "") == "FALSE"
+            ):
+                e.attr["color"] = "orangered"
+                e.attr["penwidth"] = "4.5"
+        gv.draw(f'state_{state.get("id")}.pdf', prog="dot")
+    run(
+        ["pdfunite"]
+        + sorted(
+            glob("state_*.pdf"),
+            key=lambda n: int(re.search(r"state_(\d+)", n)[1]),
+        )
+        + [f'trace_{os.path.basename(tracefile).replace(".xml", "")}.pdf']
+    )
+    if glob("state_*.pdf") != []:
+        run(["rm"] + glob("state_*.pdf"))
+
+
+if __name__ == "__main__":
+    # command line parser
+    parser = argparse.ArgumentParser(
+        description="command line tester for parsing the trace"
+    )
+
+    f_dotfile = Path(argv[1]).absolute()
+    f_trace = Path(argv[2]).absolute()
+
+    if os.path.isfile(f_dotfile) and os.path.isfile(f_trace):
+        trace2pdfs(f_dotfile, f_trace)
+    else:
+        print("[INFO] no available trace")
