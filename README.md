@@ -114,3 +114,26 @@ $ ../../traceparser fir_optimized.dot 1_dbg_model.xml # parse the traces
 # you can view the counterexample trace by opening trace_1_dbg_model.pdf
 ```
 
+To see which trace is for which property, we can checkout the file
+`property.rpt`:
+
+```
+**** PROPERTY LIST [ Type, Status, Counter-example Number, Name ] ****
+--------------------------  PROPERTY LIST  -------------------------
+...
+...
+027 :(_Buffer_1.valid0 -> add_11.ready0) 
+  [Invar          False          1      inv_no_stall__Buffer_1_nReadyArray_0]
+028 :(_Buffer_2.valid0 -> fork_0.ready0) 
+  [Invar          True           N/A    inv_no_stall__Buffer_2_nReadyArray_0]
+029 :(_Buffer_3.valid0 -> branch_2.ready1) 
+  [Invar          False          2      inv_no_stall__Buffer_3_nReadyArray_0]
+030 :(_Buffer_4.valid0 -> branchC_5.ready0) 
+  [Invar          True           N/A    inv_no_stall__Buffer_4_nReadyArray_0]
+031 :(_Buffer_5.valid0 -> phi_1.ready0) 
+  [Invar          False          3      inv_no_stall__Buffer_5_nReadyArray_0]
+```
+
+The labels 1, 2, or 3 indicate the trace labels. For instance, the property
+with name `inv_no_stall__Buffer_1_nReadyArray_0` has a counterexample, stored
+in trace `1_dbg_model.xml`.
