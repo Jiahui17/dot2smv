@@ -36,7 +36,7 @@ After running the script for each example, you could find a file `property.rpt`
 in each directory, which lists the proven/disproven properties.
 
 
-## Tutorial: adding your own formal properties
+## Tutorial 1: adding your own formal properties
 
 By default, the model generator `dot2smv` generates the absence of backpressure
 properties. You might want to customize the set of generated properties.  Let's
@@ -79,3 +79,23 @@ We should see something like this:
 -- invariant (!fork_0.valid0 | !fork_0.valid1)  is false
 elapse: 0.61 seconds, total: 0.61 seconds
 ```
+
+
+## Tutorial 2: generate counterexample traces
+
+Model checking verifies the correctness of the properties, if the property
+fails, it can generate a counterexample.  In this Tutorial, we show how to
+visualize it:
+
+
+```sh
+$ ../../dot2smv fir_optimized.dot
+$ ../../nuXmv-2.0.0-Linux/bin/nuXmv -source trace.cmd fir_optimized.dot
+$ ls
+fir_optimized.dot      model.smv     prove.cmd  trace.cmd
+fir_optimized.dot.pdf  property.rpt  test.sh
+$ ../../nuXmv-2.0.0-Linux/bin/nuXmv -source trace.cmd
+$ ../../traceparser fir_optimized.dot 1_dbg_model.xml # parse the traces
+# you can view the counterexample trace by opening trace_1_dbg_model.pdf
+```
+
