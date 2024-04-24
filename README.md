@@ -89,12 +89,27 @@ visualize it:
 
 
 ```sh
+$ cd test/fir
 $ ../../dot2smv fir_optimized.dot
 $ ../../nuXmv-2.0.0-Linux/bin/nuXmv -source trace.cmd fir_optimized.dot
 $ ls
 fir_optimized.dot      model.smv     prove.cmd  trace.cmd
 fir_optimized.dot.pdf  property.rpt  test.sh
 $ ../../nuXmv-2.0.0-Linux/bin/nuXmv -source trace.cmd
+```
+
+With the commands above, nuXmv dumps the counterexamples in traces, in the
+following files:
+
+```sh
+$ ls *_dbg_model.xml
+1_dbg_model.xml  2_dbg_model.xml  3_dbg_model.xml
+```
+
+We can use the `traceparser` to convert the generated xml file to a PDF file,
+which contains state-by-state visualization:
+
+```sh
 $ ../../traceparser fir_optimized.dot 1_dbg_model.xml # parse the traces
 # you can view the counterexample trace by opening trace_1_dbg_model.pdf
 ```
