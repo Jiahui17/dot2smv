@@ -93,8 +93,6 @@ class DFG(MultiDiGraph):
     def get_cfg_edges_in_dfg(self):
         set_of_cfg_edges = set()
         for branch, v in self.edges():
-            if not self.nodes[branch]["type"] == "Branch":
-                continue
             # get the original edge
             _, next_, _ = self.get_original_edge((branch, v))
             bb_prev = int(self.nodes[branch]["bbID"])
@@ -128,7 +126,9 @@ def get_loop_deciders(dfg):
     cfg.add_edges_from(dfg.get_cfg_edges_in_dfg())
 
     cfg_order = list(
-        dfs_preorder_nodes(cfg, source=min(list(n for n in cfg), key=lambda n: int(n)))
+        dfs_preorder_nodes(
+            cfg, source=min(list(n for n in cfg), key=lambda n: int(n))
+        )
     )
 
     deciders_to_return = set()
@@ -185,8 +185,12 @@ def get_loop_deciders(dfg):
                             dfg.nodes[child_node]["type"] == "Operator"
                             and dfg.nodes[child_node]["op"] == "select_op"
                         )
-                        child_node_is_branch = dfg.nodes[child_node]["type"] == "Branch"
-                        child_node_is_mux = dfg.nodes[child_node]["type"] == "Mux"
+                        child_node_is_branch = (
+                            dfg.nodes[child_node]["type"] == "Branch"
+                        )
+                        child_node_is_mux = (
+                            dfg.nodes[child_node]["type"] == "Mux"
+                        )
                         if child_node_is_select:
                             # if the child node is a select then
                             # the decider condition generation is
