@@ -5,7 +5,7 @@ from networkx import (
     DiGraph,
     MultiDiGraph,
 )
-from src.utils import get_op_type, parse_port, is_operator_or_decider, parse_buffer_attr, parse_constant_value
+from src.utils import get_op_type, is_operator_or_decider, parse_buffer_attr, parse_constant_value
 from src.dfg import DFG
 import pygraphviz as pgv
 import re
@@ -85,17 +85,17 @@ class NetlistWriter(DFG):
             if comp_type == "handshake.constant":
                 dataIn = f"{const_value}"
             else:
-                dataIn = f'{pred}.dataOut{parse_port(eattr["from_idx"])}'
+                dataIn = f'{pred}.dataOut{(eattr["from_idx"])}'
 
             input_signals.append(dataIn)
-            input_signals.append(f'{pred}.valid{parse_port(eattr["from_idx"])}')
+            input_signals.append(f'{pred}.valid{(eattr["from_idx"])}')
 
         sorted_output_channels = sorted([ (succ, eattr) for _, succ, eattr in self.out_edges(node, data=True) ], key=lambda d:int(d[1]["from_idx"]))
 
         # input signals from successor side
         for succ, eattr in sorted_output_channels:
 
-            input_signals.append(f'{succ}.ready{parse_port(eattr["to_idx"])}')
+            input_signals.append(f'{succ}.ready{(eattr["to_idx"])}')
 
         input_signals = ", ".join(input_signals)
 
