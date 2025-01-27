@@ -1,13 +1,6 @@
-from networkx import (
-    has_path,
-    find_cycle,
-    all_simple_paths,
-    DiGraph,
-    MultiDiGraph,
-)
 from src.utils import get_op_type, is_operator_or_decider, parse_buffer_attr, parse_constant_value
+from src.exceptions import Dot2SmvNotImplementedError
 from src.dfg import DFG
-import pygraphviz as pgv
 import re
 
 """
@@ -36,43 +29,34 @@ class NetlistWriter(DFG):
 
         comp_type = self.nodes[node]["mlir_op"]
 
-        # redeciders = self.get_loop_deciders()
+        np = sum(1 for e in self.in_edges(node))
+
+        ns = sum(1 for e in self.out_edges(node))
 
         # input signals
         if is_operator_or_decider(self.nodes[node]):
             comp_type = get_op_type(self.nodes[node])
-            # HACK: get all the deciders that control whether we take the backedge or
-            # not, and for these deciders,
-            # use a special implementation. Assume that
-            # for each of these decider
-            # - they reset with loop repeat (TRUE), i.e. they repeat the iteration at
-            # least once
-            # - if the current condition is loop repeat (TRUE), then the next condition is
-            # decided non-deterministically
-            # - if the current condition is loop exit (FALSE), then the next
-            # condition is TRUE
-
-            # if node in redeciders:
-            #     comp_type = comp_type.replace("decider", "redecider")
         elif comp_type == "handshake.buffer":
             transparent, slots = parse_buffer_attr(self.nodes[node])
             comp_type = f'_buffer{slots}{"t" if transparent else "o"}'
         elif comp_type == "handshake.constant":  # get constant value in decimal
             const_value = parse_constant_value(self.nodes[node])
+            comp_type = comp_type.replace("handshake.", "")
         elif comp_type == "delayer":
             latency = self.nodes[node]["latency"]
             comp_type = f"delayer{latency}c"
-        elif comp_type in (
-            "mc",
-            "lsq",
-        ):
-            comp_type = f'{comp_type}_{self.nodes[node]["memory"]}'
-
-        np = sum(1 for e in self.in_edges(node))
-
-        ns = sum(1 for e in self.out_edges(node))
-
-        comp_type = f"{comp_type}_{np}_{ns}"
+        elif comp_type in ("handshake.mem_controller", "handshake.lsq"):
+            memory = re.search(r"(MC|LSQ) \((\w+)\)", self.nodes[node]["label"]).group(2)
+            comp_type = comp_type.replace("handshake.", "") + f'_{memory}'
+            raise Dot2SmvNotImplementedError("Memory access is not yet supported!")
+        elif comp_type == "handshake.func" and np == 0:
+            comp_type = "entry"
+        elif comp_type == "handshake.func" and ns == 0: 
+            comp_type = "exit"
+        elif "handshake.load" in comp_type or "handshake.store" in comp_type:
+            raise Dot2SmvNotImplementedError("Memory access is not yet supported!")
+        elif "handshake" in comp_type:
+            comp_type = comp_type.replace("handshake.", "")
 
         input_signals = []
 
@@ -82,7 +66,7 @@ class NetlistWriter(DFG):
 
         for pred, eattr in sorted_input_channels:
 
-            if comp_type == "handshake.constant":
+            if comp_type == "constant":
                 dataIn = f"{const_value}"
             else:
                 dataIn = f'{pred}.dataOut{(eattr["from_idx"])}'
@@ -98,5 +82,6 @@ class NetlistWriter(DFG):
             input_signals.append(f'{succ}.ready{(eattr["to_idx"])}')
 
         input_signals = ", ".join(input_signals)
+        comp_type = f"{comp_type}_{np}_{ns}"
 
         return f"VAR {node} : {comp_type}({input_signals});"
