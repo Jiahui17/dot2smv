@@ -3,6 +3,16 @@ from networkx import nx_agraph
 
 """ convert port from dot format to hdl format """
 
+COLOR_RED = "\033[0;31m"
+COLOR_GREEN = "\033[0;32m"
+COLOR_CYAN = "\033[0;36m"
+COLOR_NC = "\033[0m"
+
+def print_msg(*args, **kwargs):
+    print(COLOR_GREEN + "[INFO]", *args, COLOR_NC, file=sys.stderr, **kwargs)
+
+def print_err(*args, **kwargs):
+    print(COLOR_RED + "[ERROR]", *args, COLOR_NC, file=sys.stderr, **kwargs)
 
 def parse_port(portid):
     return int(re.sub(r"(out|in)", "", portid)) - 1
@@ -21,23 +31,22 @@ PATTERN_OPERATOR = r"(add|ashr|shl|sub|lshr|fneg|sext|zext|getelementptr|mul|fmu
 
 PATTREN_DECIDER = r"(and|or|icmp_\w*|fcmp_\w*)_op"
 
+MLIR_OPERATOR_TYPES=r"handshake.(add|ashr|shl|sub|lshr|fneg|sext|zext|getelementptr|mul|fmul|udiv|urem|sdiv|srem|addf|subf|divf|sitofp|trunc)"
+
+MLIR_DECIDER_TYPES = r"handshake.(cmpi[<>!=]*|cmpf[<>!=]*)"
+
 
 def get_op_type(attr):
-    if not (type(attr) == dict and "type" in attr and attr["type"] == "Operator"):
-        print(attr)
-        assert False
     latency = int(attr.get("latency", 0))
+    if "latency" not in attr:
+        print_err("Be careful! The latency is not specified!")
 
-    if re.match(PATTERN_OPERATOR, attr["op"]):
+    if re.match(MLIR_OPERATOR_TYPES, attr["mlir_op"]):
+        print_msg("Matching operator!")
         return f"operator{latency}c"
-    elif re.match(PATTREN_DECIDER, attr["op"]):
+    elif re.match(MLIR_DECIDER_TYPES, attr["mlir_op"]):
+        print_msg("Matching decider!")
         return f"decider{latency}c"
-    elif re.match(r"(lsq|mc)_(load|store)_op", attr["op"]) or re.match(
-        r"select_op", attr["op"]
-    ):
-        return attr["op"]
-    elif re.match(r"ret_op", attr["op"]):
-        return "tehb"
     else:
         raise ValueError(f'error - unknown Operator {attr["op"]}')
 
