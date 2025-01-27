@@ -5,7 +5,7 @@ from networkx import (
     DiGraph,
     MultiDiGraph,
 )
-from src.utils import get_op_type, parse_port
+from src.utils import get_op_type, parse_port, is_operator_or_decider, parse_buffer_attr, parse_constant_value
 from src.dfg import DFG
 import pygraphviz as pgv
 import re
@@ -34,12 +34,12 @@ class NetlistWriter(DFG):
     # write one instantiation of module
     def write_instance(self, node):
 
-        comp_type = self.nodes[node]["type"].lower()
+        comp_type = self.nodes[node]["mlir_op"]
 
-        redeciders = self.get_loop_deciders()
+        # redeciders = self.get_loop_deciders()
 
         # input signals
-        if comp_type == "operator":
+        if is_operator_or_decider(self.nodes[node]):
             comp_type = get_op_type(self.nodes[node])
             # HACK: get all the deciders that control whether we take the backedge or
             # not, and for these deciders,
@@ -51,18 +51,14 @@ class NetlistWriter(DFG):
             # decided non-deterministically
             # - if the current condition is loop exit (FALSE), then the next
             # condition is TRUE
-            if node in redeciders:
-                comp_type = comp_type.replace("decider", "redecider")
-        elif comp_type == "buffer":
-            transparent = self.nodes[node]["transparent"] == "true"
-            slots = self.nodes[node]["slots"]
+
+            # if node in redeciders:
+            #     comp_type = comp_type.replace("decider", "redecider")
+        elif comp_type == "handshake.buffer":
+            transparent, slots = parse_buffer_attr(self.nodes[node])
             comp_type = f'_buffer{slots}{"t" if transparent else "o"}'
-        elif comp_type == "constant":  # get constant value in decimal
-            const_value = int(self.nodes[node]["value"], 0)
-            if const_value == 0:
-                const_value = "FALSE"
-            else:
-                const_value = "TRUE"
+        elif comp_type == "handshake.constant":  # get constant value in decimal
+            const_value = parse_constant_value(self.nodes[node])
         elif comp_type == "delayer":
             latency = self.nodes[node]["latency"]
             comp_type = f"delayer{latency}c"
@@ -81,20 +77,25 @@ class NetlistWriter(DFG):
         input_signals = []
 
         # input signals from predecessor side
-        for id_, (pred, _, eattr) in self.get_indexed_in_channels(node).items():
 
-            if comp_type == "constant_1_1":
+        sorted_input_channels = sorted([ (pred, eattr) for pred, _, eattr in self.in_edges(node, data=True) ], key=lambda d:int(d[1]["to_idx"]))
+
+        for pred, eattr in sorted_input_channels:
+
+            if comp_type == "handshake.constant":
                 dataIn = f"{const_value}"
             else:
-                dataIn = f'{pred}.dataOut{parse_port(eattr["from"])}'
+                dataIn = f'{pred}.dataOut{parse_port(eattr["from_idx"])}'
 
             input_signals.append(dataIn)
-            input_signals.append(f'{pred}.valid{parse_port(eattr["from"])}')
+            input_signals.append(f'{pred}.valid{parse_port(eattr["from_idx"])}')
+
+        sorted_output_channels = sorted([ (succ, eattr) for _, succ, eattr in self.out_edges(node, data=True) ], key=lambda d:int(d[1]["from_idx"]))
 
         # input signals from successor side
-        for id_, (_, succ, eattr) in self.get_indexed_out_channels(node).items():
+        for succ, eattr in sorted_output_channels:
 
-            input_signals.append(f'{succ}.ready{parse_port(eattr["to"])}')
+            input_signals.append(f'{succ}.ready{parse_port(eattr["to_idx"])}')
 
         input_signals = ", ".join(input_signals)
 
