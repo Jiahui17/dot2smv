@@ -1,4 +1,5 @@
 import re
+from src.utils import is_operator_or_decider
 
 
 """
@@ -10,7 +11,7 @@ def find_trival_edges(G):
     trivial_edges = set()
     # we always skip all edges on the path from source unit to a join unit
     for source_unit in G:
-        if not G.nodes[source_unit]["type"] == "Source":
+        if not G.nodes[source_unit]["mlir_op"] == "handshake.source":
             continue
         queue, visited = [source_unit], []
         while queue != []:
@@ -25,19 +26,15 @@ def find_trival_edges(G):
                     elif num_pred == 0:
                         raise ValueError
     for pred, succ in G.edges():
-        type_of_pred = G.nodes[pred]["type"]
-        type_of_succ = G.nodes[succ]["type"]
+        type_of_pred = G.nodes[pred]["mlir_op"]
+        type_of_succ = G.nodes[succ]["mlir_op"]
         # we always skip the edges between MC|LSQ and mc|lsq_load|store_op
-        pred_is_mem_access_port = (G.nodes[pred]["type"] == "Operator") and re.match(
-            r"(mc|lsq)_(load|store)_op", G.nodes[pred]["op"]
-        )
+        pred_is_mem_access_port = re.match(r"handshake.(load|store)", G.nodes[pred]["mlir_op"])
 
-        succ_is_mem_access_port = (G.nodes[succ]["type"] == "Operator") and re.match(
-            r"(mc|lsq)_(load|store)_op", G.nodes[succ]["op"]
-        )
+        succ_is_mem_access_port = re.match(r"handshake.(load|store)", G.nodes[succ]["mlir_op"])
 
-        pred_is_mc_or_lsq = G.nodes[pred]["type"] in ("LSQ", "MC")
-        succ_is_mc_or_lsq = G.nodes[succ]["type"] in ("LSQ", "MC")
+        pred_is_mc_or_lsq = G.nodes[pred]["mlir_op"] in ("handshake.lsq", "handshake.mem_controller")
+        succ_is_mc_or_lsq = G.nodes[succ]["mlir_op"] in ("handshake.lsq", "handshake.mem_controller")
 
         if (pred_is_mem_access_port and succ_is_mc_or_lsq) or (
             pred_is_mc_or_lsq and succ_is_mem_access_port
@@ -46,24 +43,21 @@ def find_trival_edges(G):
 
         # we always skip the edges between MC|LSQ and exit node if the
         # circuit has side effect (i.e., a store operator) or the circuit has an LSQ
-        if (pred_is_mc_or_lsq) and G.nodes[succ]["type"] == "Exit":
+        if (pred_is_mc_or_lsq) and G.nodes[succ]["mlir_op"] == "handshake.func":
             trivial_edges.add((pred, succ))
 
         any_unit_in_the_circuit_has_side_effect = any(
-            True
-            for n in G
-            if G.nodes[n]["type"] == "Operator"
-            and re.match(r"\w+_store_op", G.nodes[n]["op"])
+            True for n in G if re.match(r"handshake.store", G.nodes[n]["mlir_op"])
         )
 
-        circuit_has_lsq = any(True for n in G if G.nodes[n]["type"] == "LSQ")
+        circuit_has_lsq = any(True for n in G if G.nodes[n]["mlir_op"] == "handshake.lsq")
 
-        if any_unit_in_the_circuit_has_side_effect or circuit_has_lsq:
-            if (
-                type_of_pred.lower() == "operator"
-                and G.nodes[pred]["op"].lower() == "ret_op"
-            ):
-                trivial_edges.add((pred, succ))
+        # if any_unit_in_the_circuit_has_side_effect or circuit_has_lsq:
+        #     if (
+        #         type_of_pred.lower() == "operator"
+        #         and G.nodes[pred]["op"].lower() == "ret_op"
+        #     ):
+        #         trivial_edges.add((pred, succ))
 
     return trivial_edges
 
@@ -81,14 +75,14 @@ def check_valid_not_ready(G):
         if (pred, succ) in trivial_edges:
             continue
 
-        elif int(gna(pred)["bbID"]) < 0 and int(gna(succ)["bbID"]) < 0:
-            continue
+        # elif int(gna(pred)["bbID"]) < 0 and int(gna(succ)["bbID"]) < 0:
+        #     continue
 
         # get the index of the valid signal
-        from_ = int(re.findall(r"\d+", edgeattr["from"])[0]) - 1
+        from_ = edgeattr["from_idx"]
 
         # get the index of the ready signal
-        to_ = int(re.findall(r"\d+", edgeattr["to"])[0]) - 1
+        to_ = edgeattr["to_idx"]
 
         # valid and not ready signal
         valid_not_ready = f"{pred}.valid{from_} -> {succ}.ready{to_}"
