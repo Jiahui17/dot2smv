@@ -32,7 +32,7 @@ PATTERN_OPERATOR = r"(add|ashr|shl|sub|lshr|fneg|sext|zext|getelementptr|mul|fmu
 
 PATTREN_DECIDER = r"(and|or|icmp_\w*|fcmp_\w*)_op"
 
-MLIR_OPERATOR_TYPES=r"handshake.(add|ashr|shl|sub|lshr|fneg|extsi|extui|getelementptr|mul|fmul|udiv|urem|sdiv|srem|addf|subf|divf|sitofp|trunc)"
+MLIR_OPERATOR_TYPES=r"handshake.(add|ashr|shl|sub|lshr|fneg|extsi|extui|getelementptr|mul|fmul|udiv|urem|sdiv|srem|addf|subf|divf|sitofp|trunci)"
 
 MLIR_DECIDER_TYPES = r"handshake.(cmpi[<>!=]*|cmpf[<>!=]*)"
 
