@@ -19,11 +19,20 @@ class AssumptionWriter(DFG):
         # all nodes connected to MC at maximum is stalled by ndw by
         # number of steps upper bounded by the number of nodes connected to MC
 
-        for mc in filter(lambda n: gna(n)["type"] == "MC", self.nodes()):
+        for mc in filter(lambda n: gna(n)["mlir_op"] == "handshake.mem_controller", self.nodes()):
             # get the number of nodes connected to MC
-            n_mem_nodes = int(self.nodes.data()[mc]["ldcount"]) + int(
-                self.nodes.data()[mc]["stcount"]
+            ldcount = sum(
+                1
+                for n in self.predecessors(mc)
+                if self.nodes[n]["mlir_op"] == "handshake.load"
             )
+            # ldcount = int(attr.get("ldcount", 0))
+            stcount = sum(
+                1
+                for n in self.predecessors(mc)
+                if self.nodes[n]["mlir_op"] == "handshake.store"
+            )
+            n_mem_nodes = ldcount + stcount
             # TODO: what happend if we apply compositional checking?
             assert n_mem_nodes > 0, (
                 "error - MC node %s has zero memory port attached to it!" % mc
@@ -31,7 +40,7 @@ class AssumptionWriter(DFG):
 
             load_nodes = list(
                 filter(
-                    lambda n: "op" in gna(n) and gna(n)["op"] == "mc_load_op",
+                    lambda n: self.nodes[n]["mlir_op"] == "handshake.load",
                     self.predecessors(mc),
                 )
             )
@@ -65,7 +74,7 @@ class AssumptionWriter(DFG):
 
             store_nodes = list(
                 filter(
-                    lambda n: "op" in gna(n) and gna(n)["op"] == "mc_store_op",
+                    lambda n: self.nodes[n]["mlir_op"] == "handshake.store",
                     self.predecessors(mc),
                 )
             )
@@ -90,14 +99,14 @@ class AssumptionWriter(DFG):
                 # arbitrate them in random ways.
 
         for n, n_attr in filter(
-            lambda n: n[1]["type"] == "Fork", self.nodes(data=True)
+            lambda n: n[1]["mlir_op"] == "handshake.fork", self.nodes(data=True)
         ):
             out_edges = [e for e in filter(lambda e: e[0] == n, self.edges(data=True))]
             # look for fork -> ndw -> sink
             fns = []
-            for e in filter(lambda e: gna(e[1])["type"] == "ndw", out_edges):
+            for e in filter(lambda e: gna(e[1])["mlir_op"] == "handshake.ndw", out_edges):
                 if any(
-                    [gna(v)["type"] == "Sink" for u, v in self.edges() if u == e[1]]
+                    [gna(v)["mlir_op"] == "handshake.sink" for u, v in self.edges() if u == e[1]]
                 ):
                     fns.append(e)
             for id_, (_, v, _) in enumerate(fns):
