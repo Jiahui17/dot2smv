@@ -240,7 +240,7 @@ elastic_components = r'''
 	DEFINE valid0 :=  condition & pValid;
 	DEFINE ready  :=  nReady1 & !condition | nReady0 & condition;
 
-	MODULE branch_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+	MODULE cond_br_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
 	/*
 	port naming for branch
 	input-0: data input      (dataIn0, pValid0, ready0)
@@ -362,12 +362,12 @@ elastic_components = r'''
 	// esac;
 
 	///////////////////////////////////////////////////////
-	// module : cntrlmerge_2_2
+	// module : control_merge_2_2
 	// inputs : dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1
 	// outputs: dataOut0, valid0, dataOut1, valid1, ready0, ready1
 	//////////////////////////////////////////////////////
 
-	MODULE cntrlmerge_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
+	MODULE control_merge_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
 	DEFINE dataOut0 := f0.dataOut0;
 	DEFINE ready0 := m0.ready0;
 	DEFINE dataOut1 := b0.dataOut0;
