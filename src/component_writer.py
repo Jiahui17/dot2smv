@@ -1,6 +1,6 @@
 from itertools import combinations, product
 from textwrap import indent, dedent
-from src.utils import include_guard, get_op_type, print_msg,print_err, MLIR_OPERATOR_TYPES, MLIR_DECIDER_TYPES
+from src.utils import (include_guard, get_op_type, print_msg, print_err, MLIR_OPERATOR_TYPES, MLIR_DECIDER_TYPES, is_operator_or_decider, parse_buffer_attr)
 from src.dfg import DFG
 import os, re, argparse, pprint
 import pygraphviz as pgv
@@ -10,76 +10,6 @@ _tab = "\t"
 _newline = "\n"
 
 
-class ComponentWriter(nx.MultiDiGraph):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def write_components(self):
-        header = """
-			// parametrized.smv
-			#pragma once
-			#include "./elastic_components.smv"
-		"""
-        module_description = set()
-        module_description.add(header)
-        module_description.add(write_mem(self))
-        for node in self:
-            node_attr = self.nodes.data()[node]
-
-            np = len(
-                [e for e in self.edges if e[1] == node]
-            )  # number of predecessors
-
-            ns = len(
-                [e for e in self.edges if e[0] == node]
-            )  # number of successors
-
-            print_msg("Node type", node_attr["mlir_op"])
-
-            if re.match(MLIR_OPERATOR_TYPES, node_attr["mlir_op"]) or re.match(MLIR_DECIDER_TYPES, node_attr["mlir_op"]):
-                match = re.search(
-                    r"(operator|decider)([0-9]+)c", get_op_type(node_attr)
-                )
-                if match != None:
-                    op = match.group(1)
-                    delay = int(match.group(2))
-                    if op == "operator":
-                        module_description.add(write_operator(np, ns, delay))
-                    elif op == "decider":
-                        module_description.add(write_decider(np, ns, delay))
-
-            elif node_attr["mlir_op"].lower() == "handshake.buffer":
-
-                m = re.search(r"(tehb|oehb) \[(\d+)\]", node_attr["label"])
-
-                if m:
-                    module_description.add(
-                        write_buffer(
-                            "true" if m.group(1) == "tehb" else "false", int(m.group(2))
-                        )
-                    )
-                else:
-                    raise ValueError
-
-            elif node_attr["mlir_op"].lower() == "handshake.merge":
-                assert np in (
-                    1,
-                    2,
-                )
-
-            elif node_attr["mlir_op"].lower() == "handshake.fork" and ns != 2:
-                module_description.add(write_fork(ns))
-
-            elif node_attr["mlir_op"].lower() == "handshake.lazy_fork":
-                module_description.add(write_lazyfork(ns))
-
-            else:
-                print_err(node_attr["mlir_op"], "is not generated!")
-
-            # elif node_attr["mlir_op"].lower() == "exit":
-            #     module_description.add(write_exit(self))
-
-        return "\n".join(list(module_description))
 
 
 def write_mem(G):
@@ -883,3 +813,66 @@ def write_decider(n_pred, n_succ, latency):
 		num      := d0.num; 
 	"""
     return ret_buffer
+
+
+class ComponentWriter(nx.MultiDiGraph):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def write_components(self):
+        header = """
+			// parametrized.smv
+			#pragma once
+			#include "./elastic_components.smv"
+		"""
+        module_description = set()
+        module_description.add(header)
+        module_description.add(write_mem(self))
+        for node in self:
+            node_attr = self.nodes.data()[node]
+
+            np = len(
+                [e for e in self.edges if e[1] == node]
+            )  # number of predecessors
+
+            ns = len(
+                [e for e in self.edges if e[0] == node]
+            )  # number of successors
+
+            print_msg("Node type", node_attr["mlir_op"])
+
+            if is_operator_or_decider(node_attr):
+                match = re.search(
+                    r"(operator|decider)([0-9]+)c", get_op_type(node_attr)
+                )
+                if match != None:
+                    op = match.group(1)
+                    delay = int(match.group(2))
+                    if op == "operator":
+                        module_description.add(write_operator(np, ns, delay))
+                    elif op == "decider":
+                        module_description.add(write_decider(np, ns, delay))
+
+            elif node_attr["mlir_op"].lower() == "handshake.buffer":
+
+                module_description.add(write_buffer(*parse_buffer_attr(node_attr)))
+
+            elif node_attr["mlir_op"].lower() == "handshake.merge":
+                assert np in (
+                    1,
+                    2,
+                )
+
+            elif node_attr["mlir_op"].lower() == "handshake.fork" and ns != 2:
+                module_description.add(write_fork(ns))
+
+            elif node_attr["mlir_op"].lower() == "handshake.lazy_fork":
+                module_description.add(write_lazyfork(ns))
+
+            else:
+                print_err(node_attr["mlir_op"], "is not generated!")
+
+            # elif node_attr["mlir_op"].lower() == "exit":
+            #     module_description.add(write_exit(self))
+
+        return "\n".join(list(module_description))
