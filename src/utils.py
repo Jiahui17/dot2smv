@@ -1,4 +1,4 @@
-import sys, subprocess, re
+import sys, subprocess, re, ast
 from typing import Tuple
 from networkx import nx_agraph
 
@@ -37,7 +37,7 @@ MLIR_OPERATOR_TYPES=r"handshake.(add|ashr|shl|sub|lshr|fneg|extsi|extui|geteleme
 MLIR_DECIDER_TYPES = r"handshake.(cmpi[<>!=]*|cmpf[<>!=]*)"
 
 # returns true if the op is an operator or decider
-def is_operator_or_decider(attr):
+def is_operator_or_decider(attr) -> bool:
     return re.match(MLIR_OPERATOR_TYPES, attr["mlir_op"]) or re.match(MLIR_DECIDER_TYPES, attr["mlir_op"])
 
 def parse_buffer_attr(attr : dict) -> Tuple[str, str]:
@@ -48,6 +48,15 @@ def parse_buffer_attr(attr : dict) -> Tuple[str, str]:
         return transparent, slots
     else:
         raise ValueError
+
+# NOTE: Very hacky way of parsing the constant value, which only works when we
+# abstract the data
+def parse_constant_value(attr : dict) -> str:
+    value = attr["label"]
+    if value == "false" or ast.literal_eval(value) == 0:
+        return "FALSE"
+    else:
+        return "TRUE"
 
 
 def get_op_type(attr):
