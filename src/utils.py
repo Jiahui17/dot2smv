@@ -1,4 +1,5 @@
 import sys, subprocess, re
+from typing import Tuple
 from networkx import nx_agraph
 
 """ convert port from dot format to hdl format """
@@ -31,9 +32,22 @@ PATTERN_OPERATOR = r"(add|ashr|shl|sub|lshr|fneg|sext|zext|getelementptr|mul|fmu
 
 PATTREN_DECIDER = r"(and|or|icmp_\w*|fcmp_\w*)_op"
 
-MLIR_OPERATOR_TYPES=r"handshake.(add|ashr|shl|sub|lshr|fneg|sext|zext|getelementptr|mul|fmul|udiv|urem|sdiv|srem|addf|subf|divf|sitofp|trunc)"
+MLIR_OPERATOR_TYPES=r"handshake.(add|ashr|shl|sub|lshr|fneg|extsi|extui|getelementptr|mul|fmul|udiv|urem|sdiv|srem|addf|subf|divf|sitofp|trunc)"
 
 MLIR_DECIDER_TYPES = r"handshake.(cmpi[<>!=]*|cmpf[<>!=]*)"
+
+# returns true if the op is an operator or decider
+def is_operator_or_decider(attr):
+    return re.match(MLIR_OPERATOR_TYPES, attr["mlir_op"]) or re.match(MLIR_DECIDER_TYPES, attr["mlir_op"])
+
+def parse_buffer_attr(attr : dict) -> Tuple[str, str]:
+    m = re.search(r"(tehb|oehb) \[(\d+)\]", attr["label"])
+    if m:
+        transparent = "true" if m.group(1) == "tehb" else "false"
+        slots = int(m.group(2))
+        return transparent, slots
+    else:
+        raise ValueError
 
 
 def get_op_type(attr):
@@ -49,7 +63,6 @@ def get_op_type(attr):
         return f"decider{latency}c"
     else:
         raise ValueError(f'error - unknown Operator {attr["op"]}')
-
 
 def remove_indent(string):
     indents = []
