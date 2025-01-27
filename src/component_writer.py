@@ -9,9 +9,6 @@ import networkx as nx
 _tab = "\t"
 _newline = "\n"
 
-
-
-
 def write_mem(G):
     def gna(n):
         return G.nodes.data()[n]
@@ -22,66 +19,37 @@ def write_mem(G):
         in ("handshake.mem_controller", "handshake.lsq"),
         G.nodes(data=True),
     ):
-        print_msg("Memory node", mem)
         ldcount = sum(
             1
             for n in G.predecessors(mem)
             if G.nodes[n]["mlir_op"] == "handshake.load"
         )
+        # ldcount = int(attr.get("ldcount", 0))
+        stcount = sum(
+            1
+            for n in G.predecessors(mem)
+            if G.nodes[n]["mlir_op"] == "handshake.store"
+        )
+        print_msg("Memory node", mem)
         print_msg("Load count", ldcount)
-        ldcount = int(attr.get("ldcount", 0))
-        stcount = int(attr.get("stcount", 0))
-        bbcount = int(attr.get("bbcount", 0))
+        print_msg("Store count", stcount)
 
         memory = re.search(r"(MC|LSQ) \((\w+)\)", attr["label"]).group(2)
         print_msg("Array name", memory)
-        type_ = ("mc" if attr["mlir_op"] == "handshake.mem_controller" else "lsq")
+        type_ = attr["mlir_op"].replace("handshake.", "")
         print_msg("Type", type_)
 
+        # TODO: fix the list of signals below
+
         # get the input ports that are group requests
+
         l_group_req = [
-            re.sub(r":.*", "", n)
-            for n in attr.get("in", "").split()
-            if re.search("c", n)
+            attr["to_idx"] for u, v, attr in G.in_edges(mem, data=True) if G.nodes[u]["mlir_op"] == "handshake.fork"
         ]
 
-        # get the input ports that are address ports
-        l_address_in = [
-            re.sub(r":.*", "", n)
-            for n in attr.get("in", "").split()
-            if re.search("a", n)
-        ]
-
-        # get the input ports that are data ports
-        l_data_in = [
-            re.sub(":.*", "", n)
-            for n in attr.get("in", "").split()
-            if re.search("d", n)
-        ]
-
-        # get the output ports that are data ports
-        l_data_out = [
-            re.sub(":.*$", "", n)
-            for n in attr.get("out", "").split()
-            if re.search("d", n)
-        ]
-
-        # get the output ports that are address ports
-        l_address_out = [
-            re.sub(":.*$", "", n)
-            for n in attr.get("out", "").split()
-            if re.search("a", n)
-        ]
-
-        # get the output ports that are return ports
-        l_end_out = [
-            re.sub(":.*$", "", n)
-            for n in attr.get("out", "").split()
-            if re.search("e", n)
-        ]
         # preamble
-        n_in_entries = len(l_group_req + l_address_in + l_data_in)
-        n_out_entries = len(l_data_out + l_address_out + l_end_out)
+        n_in_entries = sum(1 for e in G.in_edges(mem))
+        n_out_entries = sum(1 for e in G.out_edges(mem))
 
         ret_buffer += "_".join(
             (f"MODULE {type_}", memory, str(n_in_entries), str(n_out_entries))
@@ -96,29 +64,35 @@ def write_mem(G):
             + ")\n"
         )
 
-        for resp in l_data_out + l_address_out + l_end_out:
-            resp_port = int(re.sub("out", "", resp)) - 1
-            ret_buffer += "DEFINE dataOut" + str(resp_port) + " := FALSE;\n"
-            ret_buffer += "DEFINE valid" + str(resp_port) + " := TRUE;\n"
+        # Output ports of the memory interface
+        for _, succ, attr in G.out_edges(mem, data=True):
+            if G.nodes[succ]["mlir_op"] == "handshake.func":
+                # TODO: output that feeds "memory returns"
+                ret_buffer += "DEFINE dataOut" + str(attr["from_idx"]) + " := FALSE;\n"
+                ret_buffer += "DEFINE valid" + str(attr["from_idx"]) + " := TRUE;\n"
+            else:
+                ret_buffer += "DEFINE dataOut" + str(attr["from_idx"]) + " := FALSE;\n"
+                ret_buffer += "DEFINE valid" + str(attr["from_idx"]) + " := TRUE;\n"
+        
+        # Input ports of the memory interface
+        for pred, _, attr in G.in_edges(mem, data=True):
+            if G.nodes[pred]["mlir_op"] == "handshake.func":
+                # TODO: input port from "memory starts"
+                ret_buffer += f'DEFINE ready{attr["to_idx"]} := TRUE;\n'
+            elif G.nodes[pred]["mlir_op"] == "handshake.fork":
+                req_port = attr["from_idx"]
+                if G.nodes[mem]["mlir_op"] == "handshake.lsq":
+                    ret_buffer += f"""
+                    VAR gr_ndw_{req_port} : ndw_1_1 (FALSE, pValid{req_port}, TRUE);
+                    DEFINE ready{req_port} := gr_ndw_{req_port}.ready0;
+                """
+                elif G.nodes[mem]["mlir_op"] == "handshake.mem_controller":
+                    ret_buffer += f"""
+                    DEFINE ready{req_port} := TRUE;
+                """
+            else:
+                ret_buffer += f'DEFINE ready{attr["to_idx"]} := TRUE;\n'
 
-        for group_req in l_group_req:
-            if gna(mem)["type"] == "LSQ":
-                req_port = int(re.sub("in", "", group_req)) - 1
-                ret_buffer += f"""
-				VAR gr_ndw_{req_port} : ndw_1_1 (FALSE, pValid{req_port}, TRUE);
-				DEFINE ready{req_port} := gr_ndw_{req_port}.ready0;
-			"""
-            elif gna(mem)["type"] == "MC":
-                req_port = int(re.sub("in", "", group_req)) - 1
-                ret_buffer += f"""
-				DEFINE ready{req_port} := TRUE;
-			"""
-
-        for address_in in l_address_in + l_data_in:
-            req_port = int(re.sub("in", "", address_in)) - 1
-            ret_buffer += f"""
-			DEFINE ready{req_port} := FALSE;
-		"""
     return ret_buffer
 
 
@@ -462,8 +436,8 @@ def write_buffer(transparent, slots):
     elif transparent == "false":
         transparent = False
     else:
-        print(transparent)
-        print(slots)
+        print_err(transparent)
+        print_err(slots)
         assert False, "error - unknown input parameters for writing buffers"
     slots = int(slots)
 
@@ -869,8 +843,8 @@ class ComponentWriter(nx.MultiDiGraph):
             elif node_attr["mlir_op"].lower() == "handshake.lazy_fork":
                 module_description.add(write_lazyfork(ns))
 
-            else:
-                print_err(node_attr["mlir_op"], "is not generated!")
+            # else:
+            #     print_err(node_attr["mlir_op"], "is not generated!")
 
             # elif node_attr["mlir_op"].lower() == "exit":
             #     module_description.add(write_exit(self))
