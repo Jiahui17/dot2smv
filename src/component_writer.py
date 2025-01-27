@@ -1,6 +1,6 @@
 from itertools import combinations, product
 from textwrap import indent, dedent
-from src.utils import include_guard, get_op_type
+from src.utils import include_guard, get_op_type, print_msg,print_err, MLIR_OPERATOR_TYPES, MLIR_DECIDER_TYPES
 from src.dfg import DFG
 import os, re, argparse, pprint
 import pygraphviz as pgv
@@ -26,11 +26,17 @@ class ComponentWriter(nx.MultiDiGraph):
         for node in self:
             node_attr = self.nodes.data()[node]
 
-            np = len([e for e in self.edges if e[1] == node])  # number of predecessors
+            np = len(
+                [e for e in self.edges if e[1] == node]
+            )  # number of predecessors
 
-            ns = len([e for e in self.edges if e[0] == node])  # number of successors
+            ns = len(
+                [e for e in self.edges if e[0] == node]
+            )  # number of successors
 
-            if node_attr["type"].lower() == "operator":
+            print_msg("Node type", node_attr["mlir_op"])
+
+            if re.match(MLIR_OPERATOR_TYPES, node_attr["mlir_op"]) or re.match(MLIR_DECIDER_TYPES, node_attr["mlir_op"]):
                 match = re.search(
                     r"(operator|decider)([0-9]+)c", get_op_type(node_attr)
                 )
@@ -42,25 +48,36 @@ class ComponentWriter(nx.MultiDiGraph):
                     elif op == "decider":
                         module_description.add(write_decider(np, ns, delay))
 
-            elif node_attr["type"].lower() == "buffer":
-                module_description.add(
-                    write_buffer(node_attr["transparent"], int(node_attr["slots"]))
-                )
+            elif node_attr["mlir_op"].lower() == "handshake.buffer":
 
-            elif node_attr["type"].lower() == "merge":
+                m = re.search(r"(tehb|oehb) \[(\d+)\]", node_attr["label"])
+
+                if m:
+                    module_description.add(
+                        write_buffer(
+                            "true" if m.group(1) == "tehb" else "false", int(m.group(2))
+                        )
+                    )
+                else:
+                    raise ValueError
+
+            elif node_attr["mlir_op"].lower() == "handshake.merge":
                 assert np in (
                     1,
                     2,
                 )
 
-            elif node_attr["type"].lower() == "fork" and ns != 2:
+            elif node_attr["mlir_op"].lower() == "handshake.fork" and ns != 2:
                 module_description.add(write_fork(ns))
 
-            elif node_attr["type"].lower() == "lazyfork":
+            elif node_attr["mlir_op"].lower() == "handshake.lazy_fork":
                 module_description.add(write_lazyfork(ns))
 
-            elif node_attr["type"].lower() == "exit":
-                module_description.add(write_exit(self))
+            else:
+                print_err(node_attr["mlir_op"], "is not generated!")
+
+            # elif node_attr["mlir_op"].lower() == "exit":
+            #     module_description.add(write_exit(self))
 
         return "\n".join(list(module_description))
 
@@ -71,13 +88,25 @@ def write_mem(G):
 
     ret_buffer = ""
     for mem, attr in filter(
-        lambda n: n[1]["type"] in ("LSQ", "MC"), G.nodes(data=True)
+        lambda n: n[1]["mlir_op"]
+        in ("handshake.mem_controller", "handshake.lsq"),
+        G.nodes(data=True),
     ):
+        print_msg("Memory node", mem)
+        ldcount = sum(
+            1
+            for n in G.predecessors(mem)
+            if G.nodes[n]["mlir_op"] == "handshake.load"
+        )
+        print_msg("Load count", ldcount)
         ldcount = int(attr.get("ldcount", 0))
         stcount = int(attr.get("stcount", 0))
         bbcount = int(attr.get("bbcount", 0))
-        memory = attr["memory"]
-        type_ = attr["type"].lower()
+
+        memory = re.search(r"(MC|LSQ) \((\w+)\)", attr["label"]).group(2)
+        print_msg("Array name", memory)
+        type_ = ("mc" if attr["mlir_op"] == "handshake.mem_controller" else "lsq")
+        print_msg("Type", type_)
 
         # get the input ports that are group requests
         l_group_req = [
@@ -256,7 +285,9 @@ def write_exit(G):
 
     # find the operator nodes
     lop = [
-        node for node in G.nodes if (G.nodes.data()[node]["type"]).lower() == "operator"
+        node
+        for node in G.nodes
+        if (G.nodes.data()[node]["type"]).lower() == "operator"
     ]
 
     # find list of return nodes (ret_op)
@@ -441,7 +472,9 @@ def write_fifo_inner(slots):
     ret_buffer += f"DEFINE numplus_exists := {numplus_exists};\n"
 
     # numminus_exists: flag that is set whenever any slot in the buffer has a valid FALSE
-    numminus_exists = " | ".join([f"(used_{i} & !mem_{i})" for i in range(slots)])
+    numminus_exists = " | ".join(
+        [f"(used_{i} & !mem_{i})" for i in range(slots)]
+    )
     ret_buffer += f"DEFINE numminus_exists := {numminus_exists};\n"
 
     # ret_buffer += f'''
@@ -642,7 +675,9 @@ def write_buffer_slot_based(transparent, slots):
 		"""
         slots_data = ["dataIn0"] + [f"b{i}.dataOut0" for i in range(slots - 1)]
         slots_valid = ["pValid"] + [f"b{i}.valid0" for i in range(slots - 1)]
-        slots_ready = [f"b{i + 1}.ready0" for i in range(slots - 1)] + ["nReady0"]
+        slots_ready = [f"b{i + 1}.ready0" for i in range(slots - 1)] + [
+            "nReady0"
+        ]
         assert len(slots_data) == slots
         assert len(slots_valid) == slots
         assert len(slots_ready) == slots
@@ -758,11 +793,15 @@ def write_join(n_pred):
     for i in range(n_pred):
         return_buffer += (
             f"DEFINE ready{i} := "
-            + " & ".join(["nReady0"] + [f"pValid{j}" for j in range(n_pred) if i != j])
+            + " & ".join(
+                ["nReady0"] + [f"pValid{j}" for j in range(n_pred) if i != j]
+            )
             + ";\n"
         )
     return_buffer += (
-        f"DEFINE valid0 := " + " & ".join([f"pValid{i}" for i in range(n_pred)]) + ";\n"
+        f"DEFINE valid0 := "
+        + " & ".join([f"pValid{i}" for i in range(n_pred)])
+        + ";\n"
     )
     return return_buffer
 
