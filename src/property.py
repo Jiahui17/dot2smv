@@ -79,10 +79,10 @@ def check_valid_not_ready(G):
         #     continue
 
         # get the index of the valid signal
-        from_ = edgeattr["from_idx"]
+        from_ = edgeattr["from_idx"] if G.nodes[pred]["mlir_op"] != "handshake.func" else 0
 
         # get the index of the ready signal
-        to_ = edgeattr["to_idx"]
+        to_ = edgeattr["to_idx"] if G.nodes[succ]["mlir_op"] != "handshake.func" else 0
 
         # valid and not ready signal
         valid_not_ready = f"{pred}.valid{from_} -> {succ}.ready{to_}"
