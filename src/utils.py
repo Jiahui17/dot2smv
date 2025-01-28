@@ -43,6 +43,7 @@ def is_operator_or_decider(attr) -> bool:
 def parse_buffer_attr(attr : dict) -> Tuple[str, str]:
     m = re.search(r"(tehb|oehb) \[(\d+)\]", attr["label"])
     if m:
+        # print_err("Matched buffer type line", m.string)
         transparent = "true" if m.group(1) == "tehb" else "false"
         slots = int(m.group(2))
         return transparent, slots
@@ -62,13 +63,14 @@ def parse_constant_value(attr : dict) -> str:
 def get_op_type(attr):
     latency = int(attr.get("latency", 0))
     if "latency" not in attr:
-        print_err("Be careful! The latency is not specified!")
+        # print_err("Be careful! The latency is not specified!")
+        pass
 
     if re.match(MLIR_OPERATOR_TYPES, attr["mlir_op"]):
-        print_msg("Matching operator!")
+        # print_msg("Matching operator!")
         return f"operator{latency}c"
     elif re.match(MLIR_DECIDER_TYPES, attr["mlir_op"]):
-        print_msg("Matching decider!")
+        # print_msg("Matching decider!")
         return f"decider{latency}c"
     else:
         raise ValueError(f'error - unknown Operator {attr["op"]}')
