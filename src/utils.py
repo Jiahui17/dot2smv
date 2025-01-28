@@ -9,6 +9,17 @@ COLOR_GREEN = "\033[0;32m"
 COLOR_CYAN = "\033[0;36m"
 COLOR_NC = "\033[0m"
 
+
+class Dot2SmvNotImplementedError(NotImplementedError):
+    def __init__(self, message, attr=None):            
+        # Call the base class constructor with the parameters it needs
+
+        formatted_message = COLOR_RED + message + COLOR_NC
+        if attr != None and "mlir_op" in attr:
+            not_implemented_unit = "Not implemented unit: " + attr["mlir_op"]
+            formatted_message = formatted_message + " " + not_implemented_unit
+        super().__init__(formatted_message)
+
 def print_msg(*args, **kwargs):
     print(COLOR_GREEN + "[INFO]", *args, COLOR_NC, file=sys.stderr, **kwargs)
 
@@ -67,6 +78,7 @@ def get_op_type(attr):
         pass
 
     if re.match(MLIR_OPERATOR_TYPES, attr["mlir_op"]):
+        raise Dot2SmvNotImplementedError("Unit is not implemented!")
         # print_msg("Matching operator!")
         return f"operator{latency}c"
     elif re.match(MLIR_DECIDER_TYPES, attr["mlir_op"]):
@@ -74,6 +86,7 @@ def get_op_type(attr):
             pass
             return "eq"
         else:
+            raise Dot2SmvNotImplementedError("Unit is not implemented!")
             # print_msg("Matching decider!")
             return f"decider{latency}c"
     else:

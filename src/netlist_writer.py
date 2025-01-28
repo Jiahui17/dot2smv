@@ -3,8 +3,8 @@ from src.utils import (
     is_operator_or_decider,
     parse_buffer_attr,
     parse_constant_value,
+    Dot2SmvNotImplementedError,
 )
-from src.exceptions import Dot2SmvNotImplementedError
 from src.dfg import DFG
 import re
 
@@ -48,6 +48,9 @@ class NetlistWriter(DFG):
             const_value = parse_constant_value(self.nodes[node])
             comp_type = comp_type.replace("handshake.", "")
         elif comp_type == "delayer":
+            raise Dot2SmvNotImplementedError(
+                "Memory access is not yet supported!", self.nodes[node]
+            )
             latency = self.nodes[node]["latency"]
             comp_type = f"delayer{latency}c"
         elif comp_type in ("handshake.mem_controller", "handshake.lsq"):
@@ -56,7 +59,7 @@ class NetlistWriter(DFG):
             ).group(2)
             comp_type = comp_type.replace("handshake.", "") + f"_{memory}"
             raise Dot2SmvNotImplementedError(
-                "Memory access is not yet supported!"
+                "Memory access is not yet supported!", self.nodes[node]
             )
         elif comp_type == "handshake.func" and np == 0:
             comp_type = "entry"
@@ -64,7 +67,7 @@ class NetlistWriter(DFG):
             comp_type = "sink"
         elif "handshake.load" in comp_type or "handshake.store" in comp_type:
             raise Dot2SmvNotImplementedError(
-                "Memory access is not yet supported!"
+                "Memory access is not yet supported!", self.nodes[node]
             )
         elif comp_type == "handshake.ndwire":
             comp_type = "ndw"
