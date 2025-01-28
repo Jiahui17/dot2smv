@@ -70,8 +70,12 @@ def get_op_type(attr):
         # print_msg("Matching operator!")
         return f"operator{latency}c"
     elif re.match(MLIR_DECIDER_TYPES, attr["mlir_op"]):
-        # print_msg("Matching decider!")
-        return f"decider{latency}c"
+        if attr["mlir_op"] == "handshake.cmpi==":
+            pass
+            return "eq"
+        else:
+            # print_msg("Matching decider!")
+            return f"decider{latency}c"
     else:
         raise ValueError(f'error - unknown Operator {attr["op"]}')
 
