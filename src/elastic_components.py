@@ -38,6 +38,13 @@ elastic_components = r'''
 	DEFINE num := toint(valid0);
 	DEFINE full := valid0;
 
+	MODULE not_1_1(dataIn0, pValid0, nReady0)
+
+    DEFINE dataOut0 := !dataIn0;
+    DEFINE valid0 := pValid0;
+    DEFINE ready0 := nReady0;
+
+
 	////////////////////////////////////
 	// name    : entry_1_1
 	// inputs  : nReady0
