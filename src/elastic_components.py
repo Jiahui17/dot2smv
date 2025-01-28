@@ -44,6 +44,14 @@ elastic_components = r'''
     DEFINE valid0 := pValid0;
     DEFINE ready0 := nReady0;
 
+	MODULE eq_2_1(dataIn0, pValid0, dataIn1, pValid1, nReady0)
+
+    DEFINE dataOut0 := (dataIn0 = dataIn1);
+	VAR j: join_2_1(pValid0, pValid1, nReady0);
+	DEFINE valid0 := j.valid0;
+	DEFINE ready0 := j.ready0;
+	DEFINE ready1 := j.ready1;
+
 
 	////////////////////////////////////
 	// name    : entry_1_1
