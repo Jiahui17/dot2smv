@@ -122,6 +122,8 @@ class NetlistWriter(DFG):
             )
         elif comp_type == "handshake.ndwire":
             comp_type = "ndw"
+        elif comp_type == "handshake.lazy_fork":
+            comp_type = "lazyfork"
         elif "handshake" in comp_type:
             comp_type = comp_type.replace("handshake.", "")
 
