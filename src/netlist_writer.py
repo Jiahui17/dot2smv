@@ -22,15 +22,66 @@ class NetlistWriter(DFG):
         header = f"""
 			#include "elastic_components.smv"
 			#include "parametrized.smv"
-			MODULE main
 		"""
         declaration = [header]
+        input_nodes = [node for node in self if len(self.out_edges(node)) > 0 and self.nodes[node]["mlir_op"] == "handshake.func"]
+        output_nodes = [node for node in self if len(self.in_edges(node)) > 0 and self.nodes[node]["mlir_op"] == "handshake.func"]
+        input_signals = []
+        ready_signals = []
+        for node in input_nodes:
+          sorted_input_channels = sorted(
+            [
+                (pred, eattr) for pred, _, eattr in self.in_edges(node, data=True)
+            ],
+            key=lambda d: int(d[1]["to_idx"]),
+          )
+          # Collect all data and valid signals on interface
+          for pred, eattr in sorted_input_channels:
+            dataIn = f'{pred}.dataOut0'
+
+            input_signals.extend([dataIn, f'{pred}.valid0'])
+
+          sorted_output_channels = sorted(
+              [
+                  (succ, eattr) for _, succ, eattr in self.out_edges(node, data=True)
+              ],
+              key=lambda d: int(d[1]["from_idx"]),
+          )
+
+          # Collect all ready signals on interface
+          for succ, eattr in sorted_output_channels:
+              to_idx = eattr["to_idx"] if self.nodes[succ]["mlir_op"] != "handshake.func" else 0
+
+              input_signals.extend([f"{node}", f'{node}_valid'])
+              ready_signals.append((f"DEFINE {node}_ready := {succ}.ready{to_idx};"))
+
+        for node in output_nodes:
+          sorted_input_channels = sorted(
+            [
+                (pred, eattr) for pred, _, eattr in self.in_edges(node, data=True)
+            ],
+            key=lambda d: int(d[1]["to_idx"]),
+          )
+          for pred, eattr in sorted_input_channels:
+            input_signals.append(f'{node}_ready')
+
+        
+        input_signals = ", ".join(input_signals)
+        declaration.append(f"MODULE elastic_miter({input_signals})")
+        declaration.extend(ready_signals)
+
+        
+
         for node in self:
-            declaration.append(self.write_instance(node))
+          declaration.append(self.write_instance(node))
         return "\n".join(declaration)
 
     # write one instantiation of module
     def write_instance(self, node):
+        
+        input_nodes = [node for node in self if len(self.out_edges(node)) > 0 and self.nodes[node]["mlir_op"] == "handshake.func"]
+        output_nodes = [node for node in self if len(self.in_edges(node)) > 0 and self.nodes[node]["mlir_op"] == "handshake.func"]
+
 
         comp_type = self.nodes[node]["mlir_op"]
 
@@ -64,7 +115,7 @@ class NetlistWriter(DFG):
         elif comp_type == "handshake.func" and np == 0:
             comp_type = "entry"
         elif comp_type == "handshake.func" and ns == 0:
-            comp_type = "sink"
+            comp_type = "end_sink"
         elif "handshake.load" in comp_type or "handshake.store" in comp_type:
             raise Dot2SmvNotImplementedError(
                 "Memory access is not yet supported!", self.nodes[node]
@@ -75,6 +126,9 @@ class NetlistWriter(DFG):
             comp_type = comp_type.replace("handshake.", "")
 
         input_signals = []
+        data_signals = []
+        valid_signals = []
+        ready_signals = []
 
         # input signals from predecessor side
 
@@ -87,17 +141,24 @@ class NetlistWriter(DFG):
         )
 
         for pred, eattr in sorted_input_channels:
-
-            # HACK: The from_idx of function argument is not enumerated
-            # according to the output id of the DOT node
-            from_idx = eattr["from_idx"] if self.nodes[pred]["mlir_op"] != "handshake.func" else 0
-
-            if comp_type == "constant":
-                dataIn = f"{const_value}"
+            if pred in input_nodes:
+              input_signals.extend([f"{pred}", f'{pred}_valid'])
+              data_signals.append(f"{pred}")
+              valid_signals.append(f'{pred}_valid')
             else:
-                dataIn = f'{pred}.dataOut{from_idx}'
+                
+              # HACK: The from_idx of function argument is not enumerated
+              # according to the output id of the DOT node
+              from_idx = eattr["from_idx"] if self.nodes[pred]["mlir_op"] != "handshake.func" else 0
 
-            input_signals.extend([dataIn, f'{pred}.valid{from_idx}'])
+              if comp_type == "constant":
+                  dataIn = f"{const_value}"
+              else:
+                  dataIn = f'{pred}.dataOut{from_idx}'
+
+              input_signals.extend([dataIn, f'{pred}.valid{from_idx}'])
+              data_signals.append(dataIn)
+              valid_signals.append(f'{pred}.valid{from_idx}')
 
         sorted_output_channels = sorted(
             [
@@ -109,11 +170,32 @@ class NetlistWriter(DFG):
 
         # input signals from successor side
         for succ, eattr in sorted_output_channels:
-            to_idx = eattr["to_idx"] if self.nodes[succ]["mlir_op"] != "handshake.func" else 0
+            if succ in output_nodes:
+              input_signals.append(f'{succ}_ready')
+              ready_signals.append(f'{succ}_ready')
+            else:
+                
+              to_idx = eattr["to_idx"] if self.nodes[succ]["mlir_op"] != "handshake.func" else 0
 
-            input_signals.append(f'{succ}.ready{to_idx}')
+              input_signals.append(f'{succ}.ready{to_idx}')
+              ready_signals.append(f'{succ}.ready{to_idx}')
+
+
+        # print(input_signals)
+
+        if comp_type == "entry":
+            return ""
+            # return f"MODULE elastic_miter({input_signals})"
+        elif comp_type == "end_sink":
+            # print(input_signals)
+            return f"DEFINE {node} := {data_signals[0]};\nDEFINE {node}_valid := {valid_signals[0]};"
+            # TODO sink stuff
+            pass
+            # for input
+            
+            # return f"DEFINE {node} := "
+
 
         input_signals = ", ".join(input_signals)
         comp_type = f"{comp_type}_{np}_{ns}"
-
         return f"VAR {node} : {comp_type}({input_signals});"
