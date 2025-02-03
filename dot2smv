@@ -13,49 +13,7 @@ from os import makedirs
 from os.path import isfile
 import re
 
-script_text = '''
-set verbose_level 0;
-set pp_list cpp;
-set counter_examples 0;
-set dynamic_reorder 1;
-set on_failure_script_quits;
-set reorder_method sift;
-set enable_sexp2bdd_caching 0;
-set bdd_static_order_heuristics basic;
-set cone_of_influence;
-set use_coi_size_sorting 1;
-read_model -i model.smv;
-flatten_hierarchy;
-encode_variables;
-build_flat_model;
-build_model -f;
-check_invar -s forward;
-show_property -o property.rpt;
-time;
-quit
-'''
 
-trace_text = '''
-set verbose_level 0;
-set pp_list cpp;
-set counter_examples 1;
-set dynamic_reorder 1;
-set on_failure_script_quits;
-set reorder_method sift;
-set enable_sexp2bdd_caching 0;
-set bdd_static_order_heuristics basic;
-set cone_of_influence;
-set use_coi_size_sorting 1;
-read_model -i model.smv;
-flatten_hierarchy;
-encode_variables;
-build_flat_model;
-build_model -f;
-check_invar -s forward;
-show_traces -a -p 4 -o dbg_model.xml;
-show_property -o property.rpt;
-quit
-'''
 
 def generate_model(dfg):
     model_text = ''
@@ -89,11 +47,54 @@ if __name__ == "__main__":
     #prop_text = "-- list of properties to check\n"
     prop_text = check_valid_not_ready(dfg)
 
+    trace_text = f'''
+    set verbose_level 0;
+    set pp_list cpp;
+    set counter_examples 1;
+    set dynamic_reorder 1;
+    set on_failure_script_quits;
+    set reorder_method sift;
+    set enable_sexp2bdd_caching 0;
+    set bdd_static_order_heuristics basic;
+    set cone_of_influence;
+    set use_coi_size_sorting 1;
+    read_model -i {d_smv / "model.smv"};
+    flatten_hierarchy;
+    encode_variables;
+    build_flat_model;
+    build_model -f;
+    check_invar -s forward;
+    show_traces -a -p 4 -o dbg_model.xml;
+    show_property -o {d_smv / "property.rpt"};
+    quit
+    '''
+    script_text = f'''
+    set verbose_level 0;
+    set pp_list cpp;
+    set counter_examples 0;
+    set dynamic_reorder 1;
+    set on_failure_script_quits;
+    set reorder_method sift;
+    set enable_sexp2bdd_caching 0;
+    set bdd_static_order_heuristics basic;
+    set cone_of_influence;
+    set use_coi_size_sorting 1;
+    read_model -i {d_smv / "model.smv"};
+    flatten_hierarchy;
+    encode_variables;
+    build_flat_model;
+    build_model -f;
+    source {d_smv / "add_props.cmd"}
+    check_ctlspec;
+    show_property -o {d_smv / "property.rpt"};
+    time;
+    quit
+    '''
     # -- Generate the model for verification -- #
     f_smv_model = d_smv / 'model.smv'
     with open(f_smv_model, 'w') as f:
         f.write(model_text)
-        f.write(prop_text)
+        # f.write(prop_text)
 
     # -- Generate the script for verification -- #
     f_smv_script = d_smv / 'prove.cmd'

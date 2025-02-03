@@ -108,8 +108,8 @@ elastic_components = r'''
 	ASSIGN
 	init(state) := { running, sleeping };
 	next(state) := case
-	state = sleeping & pValid0 : { sleeping, running };// when the wire is sleeping, it at least delays the data by one step; 
-	state = running  & pValid0 : { sleeping, running };// when the wire is running, it at least passes through one valid data;
+	state = sleeping : { sleeping, running };// when the wire is sleeping, it at least delays the data by one step; 
+	state = running & pValid0 & nReady0: { sleeping, running };// when the wire is running, it at least passes through one valid data;
 	TRUE : state;
 	esac;
 	FAIRNESS state=running;

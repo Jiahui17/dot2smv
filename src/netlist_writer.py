@@ -43,7 +43,7 @@ class NetlistWriter(DFG):
             comp_type = get_op_type(self.nodes[node])
         elif comp_type == "handshake.buffer":
             transparent, slots = parse_buffer_attr(self.nodes[node])
-            comp_type = f'_buffer{slots}{"t" if transparent == "true" else "o"}'
+            comp_type = f'buffer{slots}{"t" if transparent == "true" else "o"}'
         elif comp_type == "handshake.constant":  # get constant value in decimal
             const_value = parse_constant_value(self.nodes[node])
             comp_type = comp_type.replace("handshake.", "")
