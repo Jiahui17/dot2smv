@@ -53,6 +53,9 @@ class NetlistWriter(DFG):
               to_idx = eattr["to_idx"] if self.nodes[succ]["mlir_op"] != "handshake.func" else 0
 
               input_signals.extend([f"{node}", f'{node}_valid'])
+              if(self.nodes[succ]["mlir_op"] == "handshake.func"):
+                ready_signals.append((f"DEFINE {node}_ready := {succ}_ready;"))
+              else:
               ready_signals.append((f"DEFINE {node}_ready := {succ}.ready{to_idx};"))
 
         for node in output_nodes:
