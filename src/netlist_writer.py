@@ -140,8 +140,20 @@ class NetlistWriter(DFG):
                 (pred, eattr)
                 for pred, _, eattr in self.in_edges(node, data=True)
             ],
-            key=lambda d: int(d[1]["to_idx"]),
+            key=lambda d: -int(d[1]["to_idx"]),
         )
+
+        # if("cond_br" in comp_type):
+        #     sorted_input_channels = sorted(
+        #     [
+        #         (pred, eattr)
+        #         for pred, _, eattr in self.in_edges(node, data=True)
+        #     ],
+        #     key=lambda d: -int(d[1]["to_idx"]),
+        #     )
+        #     print("helllo there")
+        #     for pred, eattr in sorted_input_channels:
+        #         print(str(pred) + " " + str(eattr))
 
         for pred, eattr in sorted_input_channels:
             if pred in input_nodes:
