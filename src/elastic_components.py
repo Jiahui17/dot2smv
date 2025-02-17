@@ -7,6 +7,28 @@ elastic_components = r'''
 	// elastic_components.smv
 	#pragma once
 
+    
+	MODULE init_1_1(dataIn0, pValid0, nReady0)
+	VAR
+	reg     : boolean;
+	full    : boolean;
+	ASSIGN
+	init(full) := TRUE;
+	next(full) := valid0 & !nReady0;
+	init(reg)  := FALSE;
+	next(reg)  := enable ? dataIn0 : reg;
+	DEFINE
+	valid0     := pValid0 | full;
+	ready0     := !full;
+	enable     := ready0 & pValid0 & !nReady0;
+	sel        := full;
+	dataOut0   := sel ? reg : dataIn0;
+	num        := toint(full);
+	numplus    := count(full & dataOut0);
+	numminus   := count(full & !dataOut0);
+	full_plus  := full & dataOut0;
+	full_minus := full & !dataOut0;
+
 	MODULE sink_1_0(dataIn0, pValid0)
 	DEFINE ready0 := TRUE;
 
