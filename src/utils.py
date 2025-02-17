@@ -21,7 +21,7 @@ class Dot2SmvNotImplementedError(NotImplementedError):
         super().__init__(formatted_message)
 
 def print_msg(*args, **kwargs):
-    print(COLOR_GREEN + "[INFO]", *args, COLOR_NC, file=sys.stderr, **kwargs)
+    print(COLOR_GREEN + "[INFO]", *args, COLOR_NC, file=sys.stdout, **kwargs)
 
 def print_err(*args, **kwargs):
     print(COLOR_RED + "[ERROR]", *args, COLOR_NC, file=sys.stderr, **kwargs)

@@ -67,7 +67,8 @@ class NetlistWriter(DFG):
 
         
         input_signals = ", ".join(input_signals)
-        declaration.append(f"MODULE elastic_miter({input_signals})")
+        
+        declaration.append(f"MODULE model({input_signals})")
         declaration.extend(ready_signals)
 
         
@@ -190,7 +191,7 @@ class NetlistWriter(DFG):
             # return f"MODULE elastic_miter({input_signals})"
         elif comp_type == "end_sink":
             # print(input_signals)
-            return f"DEFINE {node} := {data_signals[0]};\nDEFINE {node}_valid := {valid_signals[0]};"
+            return f"DEFINE {node}_out := {data_signals[0]};\nDEFINE {node}_valid := {valid_signals[0]};"
             # TODO sink stuff
             pass
             # for input

@@ -85,6 +85,7 @@ if __name__ == "__main__":
     build_flat_model;
     build_model -f;
     check_ctlspec;
+    print_reachable_states -v;
     show_property -o {d_smv / "property.rpt"};
     time;
     quit
@@ -96,9 +97,9 @@ if __name__ == "__main__":
         # f.write(prop_text)
 
     # -- Generate the script for verification -- #
-    f_smv_script = d_smv / 'prove.cmd'
-    with open(f_smv_script, 'w') as f:
-        f.write(re.sub(r'^\t+','',script_text, flags=re.MULTILINE))
+    # f_smv_script = d_smv / 'prove.cmd'
+    # with open(f_smv_script, 'w') as f:
+    #     f.write(re.sub(r'^\t+','',script_text, flags=re.MULTILINE))
 
     # -- Generate the script for trace generation -- #
     f_dbg_script = d_smv / 'trace.cmd'
