@@ -6,7 +6,7 @@ this files contains all non-parametrized smv models of dataflow units
 elastic_components = r'''
 	// elastic_components.smv
 	#pragma once
-
+    
     
 	MODULE init_1_1(dataIn0, pValid0, nReady0)
 	VAR
@@ -445,14 +445,14 @@ elastic_components = r'''
 	DEFINE sel := dataIn0;
 
 	// new implementation: Mux colors output based on its selection input
-	DEFINE tehb_data_in := dataIn0;
+	// DEFINE tehb_data_in := dataIn0;
 
 	// old implementation: Mux propagates data (which will be removed by coi)
-	// DEFINE tehb_data_in := case
-	// pValid0 & sel = FALSE & pValid1 : dataIn1; // if sel-valid, sel-data = 0,  left-pred-ready: take left input
-	// pValid0 & sel = TRUE  & pValid2 : dataIn2; // if sel-valid, sel-data = 1, right-pred-ready: take right input
-	// TRUE : dataIn1; // everything else, for instance sel-data is not ready
-	// esac;
+	DEFINE tehb_data_in := case
+	pValid0 & sel = FALSE & pValid1 : dataIn1; // if sel-valid, sel-data = 0,  left-pred-ready: take left input
+	pValid0 & sel = TRUE  & pValid2 : dataIn2; // if sel-valid, sel-data = 1, right-pred-ready: take right input
+	TRUE : dataIn1; // everything else, for instance sel-data is not ready
+	esac;
 
 	DEFINE ready1 := (!sel & pValid0 & b0.ready0 & pValid1) | !pValid1 ? TRUE : FALSE;
 	DEFINE ready2 := (sel & pValid0 & b0.ready0 & pValid2) | !pValid2 ? TRUE : FALSE;
