@@ -4,6 +4,8 @@ from src.utils import (
     parse_buffer_attr,
     parse_constant_value,
     Dot2SmvNotImplementedError,
+    print_err,
+    print_msg,
 )
 from src.dfg import DFG
 import re
@@ -171,7 +173,9 @@ class NetlistWriter(DFG):
               else:
                   dataIn = f'{pred}.dataOut{from_idx}'
 
-              input_signals.extend([dataIn, f'{pred}.valid{from_idx}'])
+              if comp_type != "join":
+                input_signals.append(dataIn)
+              input_signals.append(f'{pred}.valid{from_idx}')
               data_signals.append(dataIn)
               valid_signals.append(f'{pred}.valid{from_idx}')
 
@@ -203,7 +207,20 @@ class NetlistWriter(DFG):
             # return f"MODULE elastic_miter({input_signals})"
         elif comp_type == "end_sink":
             # print(input_signals)
-            return f"DEFINE {node}_out := {data_signals[0]};\nDEFINE {node}_valid := {valid_signals[0]};"
+            sorted_input_channels = sorted(
+            [
+                (pred, eattr)
+                for pred, _, eattr in self.in_edges(node, data=True)
+            ],
+            key=lambda d: -int(d[1]["to_idx"]),
+            )
+
+            for pred, eattr in sorted_input_channels:
+                prev_op = self.nodes[pred]['mlir_op']
+            if prev_op == "handshake.join":
+                return f"DEFINE {node}_valid := {valid_signals[0]};"
+            else:
+                return f"DEFINE {node}_out := {data_signals[0]};\nDEFINE {node}_valid := {valid_signals[0]};"
             # TODO sink stuff
             pass
             # for input
