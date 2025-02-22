@@ -65,10 +65,13 @@ def parse_buffer_attr(attr : dict) -> Tuple[str, str]:
 # abstract the data
 def parse_constant_value(attr : dict) -> str:
     value = attr["label"]
-    if value == "false" or ast.literal_eval(value) == 0:
+    if value == "false":
         return "FALSE"
-    else:
-        return "TRUE"
+    elif value == "true":
+       return "TRUE"
+    elif ast.literal_eval(value) == 0:
+      return "FALSE"
+    return "TRUE"
 
 
 def get_op_type(attr):
