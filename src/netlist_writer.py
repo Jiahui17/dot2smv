@@ -147,8 +147,8 @@ class NetlistWriter(DFG):
             ],
             key=lambda d: int(d[1]["to_idx"]),
         )
-
-        if("cond_br" in comp_type):
+        
+        if(comp_type in ("cond_br", "control_merge")):
             sorted_input_channels = sorted(
             [
                 (pred, eattr)
