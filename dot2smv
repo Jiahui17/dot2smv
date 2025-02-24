@@ -102,7 +102,7 @@ if __name__ == "__main__":
     #     f.write(re.sub(r'^\t+','',script_text, flags=re.MULTILINE))
 
     # -- Generate the script for trace generation -- #
-    f_dbg_script = d_smv / 'trace.cmd'
-    with open(f_dbg_script, 'w') as f:
-        f.write(re.sub(r'^\t+','',trace_text, flags=re.MULTILINE))
+    # f_dbg_script = d_smv / 'trace.cmd'
+    # with open(f_dbg_script, 'w') as f:
+    #     f.write(re.sub(r'^\t+','',trace_text, flags=re.MULTILINE))
 
