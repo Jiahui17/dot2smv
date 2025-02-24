@@ -148,14 +148,14 @@ class NetlistWriter(DFG):
             key=lambda d: int(d[1]["to_idx"]),
         )
         
-        if(comp_type in ("cond_br", "control_merge")):
-            sorted_input_channels = sorted(
-            [
-                (pred, eattr)
-                for pred, _, eattr in self.in_edges(node, data=True)
-            ],
-            key=lambda d: -int(d[1]["to_idx"]),
-            )
+        # if(comp_type in ("cond_br", "control_merge")):
+        #     sorted_input_channels = sorted(
+        #     [
+        #         (pred, eattr)
+        #         for pred, _, eattr in self.in_edges(node, data=True)
+        #     ],
+        #     key=lambda d: -int(d[1]["to_idx"]),
+        #     )
 
         for pred, eattr in sorted_input_channels:
             if pred in input_nodes:

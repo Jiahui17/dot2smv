@@ -461,9 +461,7 @@ def write_buffer_fifo_based(transparent, slots):
 			dataOut0 := b.dataOut0;
 			valid0   := b.valid0;
 			ready0   := b.ready0;
-			num := count(b.b0.valid0, b.b1.full);
-			numplus := count(b.b0.valid0 & b.b0.dataOut0, b.b1.full & b.b1.dataOut0);
-			numminus := count(b.b0.valid0 & !b.b0.dataOut0, b.b1.full & !b.b1.dataOut0);
+			num := count(b.b1.full);
 		"""
     elif slots == 1 and transparent:
         return f"""

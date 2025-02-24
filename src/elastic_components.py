@@ -279,14 +279,14 @@ elastic_components = r'''
 	MODULE cond_br_2_2(dataIn0, pValid0, dataIn1, pValid1, nReady0, nReady1)
 	/*
 	port naming for branch
-	input-0: data input      (dataIn0, pValid0, ready0)
-	input-1: condition input (dataIn1, pValid1, ready1)
+	input-0: condition input (dataIn0, pValid0, ready0)
+	input-1: data input      (dataIn1, pValid1, ready1)
 	*/
-	DEFINE condition := dataIn1;
+	DEFINE condition := dataIn0;
 	VAR    j         : join_2_1(pValid0, pValid1, br.ready);
 	VAR    br        : branchSimple(condition, j.valid0, nReady0, nReady1);
-	DEFINE dataOut0  := dataIn0; // when ctrl = TRUE
-	DEFINE dataOut1  := dataIn0; // when ctrl = FALSE
+	DEFINE dataOut0  := dataIn1; // when ctrl = TRUE
+	DEFINE dataOut1  := dataIn1; // when ctrl = FALSE
 	DEFINE valid0    := br.valid0;
 	DEFINE valid1    := br.valid1;
 	DEFINE ready0 := j.ready0; // data input
@@ -409,11 +409,12 @@ elastic_components = r'''
 	DEFINE dataOut1 := b0.dataOut0;
 	DEFINE ready1 := m0.ready1;
 	DEFINE index := case
-	pValid0 : FALSE;
+	pValid1 : FALSE;
 	TRUE    : TRUE;
 	esac;
 	VAR b0 : tehb_1_1(index, m0.valid0, f0.ready0); 
-	VAR m0 : merge_notehb_2_1(dataIn0, pValid0, dataIn1, pValid1, b0.ready0);
+	VAR m0 : merge_notehb_2_1(dataIn0, pValid1, dataIn0, pValid0, b0.ready0);
+    -- Do we need to switch ready\?
 	VAR f0 : fork_1_2(b0.dataOut0, b0.valid0, nReady0, nReady1);
 	DEFINE valid0 := f0.valid0;
 	DEFINE valid1 := f0.valid1;
@@ -441,7 +442,7 @@ elastic_components = r'''
 	// outputs: dataOut0, valid0, ready0, ready1, ready2
 	//////////////////////////////////////////////////////
 
-	MODULE mux_3_1(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0)
+	MODULE mux_3_1_old(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0)
 	DEFINE sel := dataIn0;
 
 	// new implementation: Mux colors output based on its selection input
@@ -462,6 +463,23 @@ elastic_components = r'''
 	DEFINE dataOut0 := b0.dataOut0;
 	DEFINE ready0 := (!pValid0 | tehb_pvalid & b0.ready0);
 	DEFINE num := toint(b0.full); // convience
+    
+    MODULE mux_3_1(dataIn0, pValid0, dataIn1, pValid1, dataIn2, pValid2, nReady0)
+	DEFINE sel := dataIn0;
+
+	// old implementation: Mux propagates data (which will be removed by coi)
+	DEFINE tehb_data_in := case
+	pValid0 & sel = FALSE & pValid1 : dataIn1; // if sel-valid, sel-data = 0,  left-pred-ready: take left input
+	pValid0 & sel = TRUE  & pValid2 : dataIn2; // if sel-valid, sel-data = 1, right-pred-ready: take right input
+	TRUE : dataIn1; // everything else, for instance sel-data is not ready
+	esac;
+
+	DEFINE ready1 := (!sel & pValid0 & nReady0 & pValid1) | !pValid1 ? TRUE : FALSE;
+	DEFINE ready2 := (sel & pValid0 & nReady0 & pValid2) | !pValid2 ? TRUE : FALSE;
+	DEFINE tehb_pvalid := (pValid0 & !sel & pValid1) | (pValid0 & sel & pValid2) ? TRUE : FALSE;
+	DEFINE valid0 := tehb_pvalid;
+	DEFINE dataOut0 := tehb_data_in;
+	DEFINE ready0 := (!pValid0 | tehb_pvalid & nReady0);
 
 --	---------------------------------------------------------------------------
 --	-- New description of select operator
